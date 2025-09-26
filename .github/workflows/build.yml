@@ -1,0 +1,29 @@
+name: build-zniff.rs
+run-name: Build Zniff.rs
+on: [push]
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: cargo build --release
+
+#  build-windows:
+#    runs-on: windows-latest
+#    steps:
+#      - uses: actions/checkout@v5
+#      - uses: actions/setup-node@v4
+#        with:
+#          node-version: '20'
+#      - run: npm install -g bats
+#      - run: bats -v
+
+  # build-macos:
+  #   runs-on: macos-latest
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #     - run: npm install -g bats
+  #     - run: bats -v
