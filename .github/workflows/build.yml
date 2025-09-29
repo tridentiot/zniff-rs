@@ -16,14 +16,29 @@ jobs:
       - uses: actions/checkout@v5
       - run: cargo build --release
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zniff-rs-ubuntu
+          path: ./target/release/zniff-rs
+
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
       - run: cargo build --release
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zniff-rs-windows
+          path: ./target/release/zniff-rs.exe
+
   build-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
       - run: cargo build --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zniff-rs-macos
+          path: ./target/release/zniff-rs
