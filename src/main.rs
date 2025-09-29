@@ -2,6 +2,7 @@ use std::time::Duration;
 use std::io::{self, Write, Read};
 
 use clap::{Parser, Subcommand, ValueEnum};
+use serialport::SerialPort;
 
 #[derive(Parser)]
 #[command(name = "toolbox")]
@@ -64,14 +65,167 @@ enum Region {
     KR = 33,
 }
 
-fn run(port_name: String, _region: &Region) {
+struct Zniffer {
+    port: Box<dyn SerialPort>,
+    region: Region,
+}
+
+impl Zniffer {
+    fn new(port: Box<dyn SerialPort>, region: Region) -> Self {
+        Zniffer { port, region }
+    }
+
+    fn get_version(&mut self) -> Vec<u8> {
+        let msg: Vec<u8> = vec![
+            0x23, // SOF
+            0x01, // Command: 0x01 = Version
+            0x00, // Length
+        ];
+        let send_result = self.port.write_all(&msg);
+
+        match send_result {
+            Ok(()) => println!("Write successful"),
+            Err(e) => eprintln!("Write failed: {}", e),
+        }
+
+        let mut buffer: Vec<u8> = vec![0; 128];
+        let mut response_length: usize = 0;
+        loop {
+            match self.port.read(buffer.as_mut_slice()) {
+                Ok(bytes_read) => {
+                    println!("Received {:?} bytes", bytes_read);
+                    for byte in &buffer[..bytes_read] {
+                        print!("0x{:02X} ", byte);
+                    }
+                    println!();
+                    response_length = bytes_read;
+                    // TODO: Add frame parsing so we can exit when a valid frame is received.
+                },
+                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                    println!("Timed out waiting for response");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Error reading from serial port: {:?}", e);
+                    break;
+                }
+            }
+        }
+        return buffer[0..response_length].to_vec();
+    }
+
+    fn set_region(&mut self) {
+        let msg: Vec<u8> = vec![
+            0x23, // SOF
+            0x02, // Set region
+            0x01, // Length
+            self.region as u8,
+        ];
+        let send_result = self.port.write_all(&msg);
+
+        match send_result {
+            Ok(()) => println!("Write successful"),
+            Err(e) => eprintln!("Write failed: {}", e),
+        }
+    }
+
+    fn start(&mut self) -> Vec<u8> {
+        let msg: Vec<u8> = vec![
+            0x23, // SOF
+            0x04, // Start
+            0x00, // Length
+        ];
+        let send_result = self.port.write_all(&msg);
+
+        match send_result {
+            Ok(()) => println!("Write successful"),
+            Err(e) => eprintln!("Write failed: {}", e),
+        }
+
+        let mut buffer: Vec<u8> = vec![0; 128];
+        let mut response_length: usize = 0;
+        loop {
+            match self.port.read(buffer.as_mut_slice()) {
+                Ok(bytes_read) => {
+                    println!("Received {:?} bytes", bytes_read);
+                    for byte in &buffer[..bytes_read] {
+                        print!("0x{:02X} ", byte);
+                    }
+                    println!();
+                    response_length = bytes_read;
+                    // TODO: Add frame parsing so we can exit when a valid frame is received.
+                },
+                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                    println!("Timed out waiting for response");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Error reading from serial port: {:?}", e);
+                    break;
+                }
+            }
+        }
+        return buffer[0..response_length].to_vec();
+    }
+
+    fn get_frames(&mut self) -> Vec<u8> {
+        let mut buffer: Vec<u8> = vec![0; 128];
+        let mut response_length: usize = 0;
+        loop {
+            match self.port.read(buffer.as_mut_slice()) {
+                Ok(bytes_read) => {
+                    println!("Received {:?} bytes", bytes_read);
+                    for byte in &buffer[..bytes_read] {
+                        print!("0x{:02X} ", byte);
+                    }
+                    println!();
+                    response_length = bytes_read;
+                    // TODO: Add frame parsing so we can exit when a valid frame is received.
+                },
+                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                    println!("Timed out waiting for response");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Error reading from serial port: {:?}", e);
+                    break;
+                }
+            }
+        }
+        return buffer[0..response_length].to_vec();
+    }
+}
+
+fn print_hex(vec: &Vec<u8>) {
+    for byte in vec {
+        print!("0x{:02X} ", byte);
+    }
+    println!(); // newline at the end
+}
+
+
+fn run(port_name: String, region: &Region) {
     let baud_rate = 230_400;
 
     println!("Connecting to {}", port_name);
-    let mut port = serialport::new(port_name, baud_rate)
-        .timeout(Duration::from_millis(1000))
+    let port = serialport::new(port_name, baud_rate)
+        .timeout(Duration::from_millis(500))
         .open()
         .expect("Failed to open port");
+
+    let mut zniffer = Zniffer::new(port, *region);
+
+    let version: Vec<u8> = zniffer.get_version();
+    print_hex(&version);
+
+    zniffer.set_region();
+
+    let _response = zniffer.start();
+
+    loop {
+        let frame: Vec<u8> = zniffer.get_frames();
+        print_hex(&frame);
+    }
 
     /*
     let get_version: Vec<u8> = vec![
@@ -81,45 +235,45 @@ fn run(port_name: String, _region: &Region) {
     ];
     */
 
-    let msg: Vec<u8> = vec![
-        0x23, // SOF
-        0x01, // Command: 0x01 = Version
-        0x00, // Length
-    ];
-    let send_result = port.write_all(&msg);
+    // let msg: Vec<u8> = vec![
+    //     0x23, // SOF
+    //     0x01, // Command: 0x01 = Version
+    //     0x00, // Length
+    // ];
+    // let send_result = port.write_all(&msg);
 
-    match send_result {
-        Ok(()) => println!("Write successful"),
-        Err(e) => eprintln!("Write failed: {}", e),
-    }
+    // match send_result {
+    //     Ok(()) => println!("Write successful"),
+    //     Err(e) => eprintln!("Write failed: {}", e),
+    // }
 
-    let mut buffer: Vec<u8> = vec![0; 128];
-    loop {
-        match port.read(buffer.as_mut_slice()) {
-            Ok(bytes_read) => {
-                println!("Received {:?} bytes", bytes_read);
-                for byte in &buffer[..bytes_read] {
-                    print!("0x{:02X} ", byte);
-                }
-                println!();
+    // let mut buffer: Vec<u8> = vec![0; 128];
+    // loop {
+    //     match port.read(buffer.as_mut_slice()) {
+    //         Ok(bytes_read) => {
+    //             println!("Received {:?} bytes", bytes_read);
+    //             for byte in &buffer[..bytes_read] {
+    //                 print!("0x{:02X} ", byte);
+    //             }
+    //             println!();
 
-                /*
-                println!(
-                    "Received ({} bytes): {:x}",
-                    bytes_read,
-                    &buffer[..bytes_read]
-                );
-                */
-            },
-            Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                println!("Timed out waiting for response");
-            }
-            Err(e) => {
-                eprintln!("Error reading from serial port: {:?}", e);
-                break;
-            }
-        }
-    }
+    //             /*
+    //             println!(
+    //                 "Received ({} bytes): {:x}",
+    //                 bytes_read,
+    //                 &buffer[..bytes_read]
+    //             );
+    //             */
+    //         },
+    //         Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+    //             println!("Timed out waiting for response");
+    //         }
+    //         Err(e) => {
+    //             eprintln!("Error reading from serial port: {:?}", e);
+    //             break;
+    //         }
+    //     }
+    // }
 }
 
 fn main() {
