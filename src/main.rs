@@ -75,18 +75,14 @@ impl Zniffer {
         Zniffer { port, region }
     }
 
-    fn get_version(&mut self) -> Vec<u8> {
+    fn get_version(&mut self) -> Result<Vec<u8>, std::io::Error> {
         let msg: Vec<u8> = vec![
             0x23, // SOF
             0x01, // Command: 0x01 = Version
             0x00, // Length
         ];
-        let send_result = self.port.write_all(&msg);
 
-        match send_result {
-            Ok(()) => println!("Write successful"),
-            Err(e) => eprintln!("Write failed: {}", e),
-        }
+        self.port.write_all(&msg)?;
 
         let mut buffer: Vec<u8> = vec![0; 128];
         let mut response_length: usize = 0;
@@ -112,22 +108,18 @@ impl Zniffer {
                 }
             }
         }
-        return buffer[0..response_length].to_vec();
+        Ok(buffer[0..response_length].to_vec())
     }
 
-    fn set_region(&mut self) {
+    fn set_region(&mut self) -> Result<(), std::io::Error>  {
         let msg: Vec<u8> = vec![
             0x23, // SOF
             0x02, // Set region
             0x01, // Length
             self.region as u8,
         ];
-        let send_result = self.port.write_all(&msg);
-
-        match send_result {
-            Ok(()) => println!("Write successful"),
-            Err(e) => eprintln!("Write failed: {}", e),
-        }
+        self.port.write_all(&msg)?;
+        Ok(())
     }
 
     fn start(&mut self) -> Vec<u8> {
@@ -184,7 +176,7 @@ impl Zniffer {
                     // TODO: Add frame parsing so we can exit when a valid frame is received.
                 },
                 Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                    println!("Timed out waiting for response");
+                    //println!("Timed out waiting for response");
                     break;
                 }
                 Err(e) => {
@@ -216,10 +208,18 @@ fn run(port_name: String, region: &Region) {
 
     let mut zniffer = Zniffer::new(port, *region);
 
-    let version: Vec<u8> = zniffer.get_version();
-    print_hex(&version);
+    match zniffer.get_version() {
+        Ok(version) => {
+            println!("Got version:");
+            print_hex(&version);
+        },
+        Err(e) => {
+            eprintln!("Failed to get the version: {:?}", e);
+        }
+    }
 
-    zniffer.set_region();
+    // TODO: Handle potential error when setting the region.
+    let _ = zniffer.set_region();
 
     let _response = zniffer.start();
 
@@ -227,54 +227,6 @@ fn run(port_name: String, region: &Region) {
         let frame: Vec<u8> = zniffer.get_frames();
         print_hex(&frame);
     }
-
-    /*
-    let get_version: Vec<u8> = vec![
-        0x23, // Command SOF
-        0x03, // Command: 0x01 = Version
-        0x00, // Length
-    ];
-    */
-
-    // let msg: Vec<u8> = vec![
-    //     0x23, // SOF
-    //     0x01, // Command: 0x01 = Version
-    //     0x00, // Length
-    // ];
-    // let send_result = port.write_all(&msg);
-
-    // match send_result {
-    //     Ok(()) => println!("Write successful"),
-    //     Err(e) => eprintln!("Write failed: {}", e),
-    // }
-
-    // let mut buffer: Vec<u8> = vec![0; 128];
-    // loop {
-    //     match port.read(buffer.as_mut_slice()) {
-    //         Ok(bytes_read) => {
-    //             println!("Received {:?} bytes", bytes_read);
-    //             for byte in &buffer[..bytes_read] {
-    //                 print!("0x{:02X} ", byte);
-    //             }
-    //             println!();
-
-    //             /*
-    //             println!(
-    //                 "Received ({} bytes): {:x}",
-    //                 bytes_read,
-    //                 &buffer[..bytes_read]
-    //             );
-    //             */
-    //         },
-    //         Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-    //             println!("Timed out waiting for response");
-    //         }
-    //         Err(e) => {
-    //             eprintln!("Error reading from serial port: {:?}", e);
-    //             break;
-    //         }
-    //     }
-    // }
 }
 
 fn main() {
