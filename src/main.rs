@@ -102,6 +102,7 @@ impl Zniffer {
                     // TODO: Add frame parsing so we can exit when a valid frame is received.
                 },
                 Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                    // TODO: Remove print when timing out.
                     println!("Timed out waiting for response");
                     break;
                 }
