@@ -1,4 +1,7 @@
+mod xml;
 use clap::{Parser, Subcommand};
+use xml::parse_xml;
+use xml::ZwClasses;
 
 #[derive(Parser)]
 #[command(name = "toolbox")]
@@ -49,6 +52,10 @@ fn main() {
             println!("Running with config: {:?}", config);
             println!("Debug mode: {}", debug);
             // Add run logic here
+            let zw: ZwClasses = parse_xml();
+            for class in zw.cmd_class {
+                println!("{:?}", class.key);
+            }
         }
     }
 }
