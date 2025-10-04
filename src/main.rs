@@ -7,6 +7,12 @@ use std::io::{self, Write, Read};
 use clap::{Parser, Subcommand, ValueEnum};
 use serialport::SerialPort;
 
+use crate::types::Frame;
+use crate::zniffer_parser::ParserResult;
+
+mod types;
+mod zniffer_parser;
+
 #[derive(Parser)]
 #[command(name = "toolbox")]
 #[command(about = "A CLI tool with multiple subcommands", long_about = None)]
@@ -71,11 +77,16 @@ enum Region {
 struct Zniffer {
     port: Box<dyn SerialPort>,
     region: Region,
+    parser: zniffer_parser::Parser,
 }
 
 impl Zniffer {
     fn new(port: Box<dyn SerialPort>, region: Region) -> Self {
-        Zniffer { port, region }
+        Zniffer {
+            port,
+            region,
+            parser: zniffer_parser::Parser::new()
+        }
     }
 
     fn get_version(&mut self) -> Result<Vec<u8>, std::io::Error> {
@@ -98,11 +109,20 @@ impl Zniffer {
                     }
                     println!();
                     response_length = bytes_read;
-                    // TODO: Add frame parsing so we can exit when a valid frame is received.
+                    match self.parser.parse(buffer.clone()) {
+                        ParserResult::ValidCommand { id } => {
+                            println!("Got command ID {:?}", id);
+                        },
+                        ParserResult::ValidFrame { frame: _ } => {
+                            // This should not happen since we're expecting a response to Get Version.
+                        },
+                        ParserResult::IncompleteFrame => {
+                            // Continue parsing.
+                        },
+                    }
                 },
                 Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                    // TODO: Remove print when timing out.
-                    println!("Timed out waiting for response");
+                    self.parser.timeout();
                     break;
                 }
                 Err(e) => {
@@ -143,11 +163,11 @@ impl Zniffer {
         loop {
             match self.port.read(buffer.as_mut_slice()) {
                 Ok(bytes_read) => {
-                    println!("Received {:?} bytes", bytes_read);
-                    for byte in &buffer[..bytes_read] {
-                        print!("0x{:02X} ", byte);
-                    }
-                    println!();
+                    //println!("Received {:?} bytes", bytes_read);
+                    //for byte in &buffer[..bytes_read] {
+                    //    print!("0x{:02X} ", byte);
+                    //}
+                    //println!();
                     response_length = bytes_read;
                     // TODO: Add frame parsing so we can exit when a valid frame is received.
                 },
@@ -164,31 +184,35 @@ impl Zniffer {
         return buffer[0..response_length].to_vec();
     }
 
-    fn get_frames(&mut self) -> Vec<u8> {
+    fn get_frames(&mut self) -> Result<Frame, bool> {
         let mut buffer: Vec<u8> = vec![0; 128];
-        let mut response_length: usize = 0;
         loop {
+            // TODO: Do we need to read data from the serial port into a ring buffer to avoid
+            // dropping frame 2 of 2 that might have been read from the serial port at once?
             match self.port.read(buffer.as_mut_slice()) {
                 Ok(bytes_read) => {
-                    println!("Received {:?} bytes", bytes_read);
-                    for byte in &buffer[..bytes_read] {
-                        print!("0x{:02X} ", byte);
+                    match self.parser.parse(buffer[..bytes_read].to_vec()) {
+                        ParserResult::ValidCommand { id: _ } => {
+                            // This should not happen as we do not expect
+                            // unsolicited commands from the zniffer device.
+                        },
+                        ParserResult::ValidFrame { frame } => {
+                            return Ok(frame);
+                        },
+                        ParserResult::IncompleteFrame => {
+                            // Continue parsing.
+                        },
                     }
-                    println!();
-                    response_length = bytes_read;
-                    // TODO: Add frame parsing so we can exit when a valid frame is received.
                 },
                 Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                    //println!("Timed out waiting for response");
-                    break;
+                    self.parser.timeout();
                 }
                 Err(e) => {
                     eprintln!("Error reading from serial port: {:?}", e);
-                    break;
+                    return Err(false);
                 }
             }
         }
-        return buffer[0..response_length].to_vec();
     }
 }
 
@@ -230,11 +254,22 @@ fn run(port_name: String, region: &Region) {
         }
     }
 
-    let _response = zniffer.start();
+    let _ = zniffer.start();
 
     loop {
-        let frame: Vec<u8> = zniffer.get_frames();
-        print_hex(&frame);
+        match zniffer.get_frames() {
+            Ok(frame) => {
+                println!("{:?}", frame);
+                // TODO: Enqueue the frame to let something else process it.
+            },
+            Err(true) => {
+                panic!("Should never happen!");
+            },
+            Err(false) => {
+                println!("Failed to get frame!");
+                return;
+            }
+        }
     }
 }
 
