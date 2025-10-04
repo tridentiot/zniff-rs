@@ -221,8 +221,14 @@ fn run(port_name: String, region: &Region) {
         }
     }
 
-    // TODO: Handle potential error when setting the region.
-    let _ = zniffer.set_region();
+    match zniffer.set_region() {
+        Ok(()) => {
+            // Don't do anything.
+        },
+        Err(e) => {
+            eprintln!("Failed to set the region: {:?}", e);
+        }
+    }
 
     let _response = zniffer.start();
 
