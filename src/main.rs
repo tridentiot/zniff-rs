@@ -2,6 +2,11 @@ mod xml;
 use clap::{Parser, Subcommand};
 use xml::parse_xml;
 use xml::ZwClasses;
+use std::time::Duration;
+use std::io::{self, Write, Read};
+
+use clap::{Parser, Subcommand, ValueEnum};
+use serialport::SerialPort;
 
 #[derive(Parser)]
 #[command(name = "toolbox")]
@@ -37,7 +42,195 @@ enum Commands {
         /// Enable debug mode
         #[arg(long)]
         debug: bool,
+
+        /// Serial port
+        #[arg(long)]
+        port: String,
+
+        /// Z-Wave region
+        #[arg(long, value_enum)]
+        region: Region,
     },
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
+enum Region {
+    EU = 0,
+    US = 1,
+    ANZ = 2,
+    HK = 3,
+    IN = 5,
+    IL = 6,
+    RU = 7,
+    CN = 8,
+    USLR = 9,
+    EULR = 11,
+    JP = 32,
+    KR = 33,
+}
+
+struct Zniffer {
+    port: Box<dyn SerialPort>,
+    region: Region,
+}
+
+impl Zniffer {
+    fn new(port: Box<dyn SerialPort>, region: Region) -> Self {
+        Zniffer { port, region }
+    }
+
+    fn get_version(&mut self) -> Result<Vec<u8>, std::io::Error> {
+        let msg: Vec<u8> = vec![
+            0x23, // SOF
+            0x01, // Command: 0x01 = Version
+            0x00, // Length
+        ];
+
+        self.port.write_all(&msg)?;
+
+        let mut buffer: Vec<u8> = vec![0; 128];
+        let mut response_length: usize = 0;
+        loop {
+            match self.port.read(buffer.as_mut_slice()) {
+                Ok(bytes_read) => {
+                    println!("Received {:?} bytes", bytes_read);
+                    for byte in &buffer[..bytes_read] {
+                        print!("0x{:02X} ", byte);
+                    }
+                    println!();
+                    response_length = bytes_read;
+                    // TODO: Add frame parsing so we can exit when a valid frame is received.
+                },
+                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                    // TODO: Remove print when timing out.
+                    println!("Timed out waiting for response");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Error reading from serial port: {:?}", e);
+                    break;
+                }
+            }
+        }
+        Ok(buffer[0..response_length].to_vec())
+    }
+
+    fn set_region(&mut self) -> Result<(), std::io::Error>  {
+        let msg: Vec<u8> = vec![
+            0x23, // SOF
+            0x02, // Set region
+            0x01, // Length
+            self.region as u8,
+        ];
+        self.port.write_all(&msg)?;
+        Ok(())
+    }
+
+    fn start(&mut self) -> Vec<u8> {
+        let msg: Vec<u8> = vec![
+            0x23, // SOF
+            0x04, // Start
+            0x00, // Length
+        ];
+        let send_result = self.port.write_all(&msg);
+
+        match send_result {
+            Ok(()) => println!("Write successful"),
+            Err(e) => eprintln!("Write failed: {}", e),
+        }
+
+        let mut buffer: Vec<u8> = vec![0; 128];
+        let mut response_length: usize = 0;
+        loop {
+            match self.port.read(buffer.as_mut_slice()) {
+                Ok(bytes_read) => {
+                    println!("Received {:?} bytes", bytes_read);
+                    for byte in &buffer[..bytes_read] {
+                        print!("0x{:02X} ", byte);
+                    }
+                    println!();
+                    response_length = bytes_read;
+                    // TODO: Add frame parsing so we can exit when a valid frame is received.
+                },
+                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                    println!("Timed out waiting for response");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Error reading from serial port: {:?}", e);
+                    break;
+                }
+            }
+        }
+        return buffer[0..response_length].to_vec();
+    }
+
+    fn get_frames(&mut self) -> Vec<u8> {
+        let mut buffer: Vec<u8> = vec![0; 128];
+        let mut response_length: usize = 0;
+        loop {
+            match self.port.read(buffer.as_mut_slice()) {
+                Ok(bytes_read) => {
+                    println!("Received {:?} bytes", bytes_read);
+                    for byte in &buffer[..bytes_read] {
+                        print!("0x{:02X} ", byte);
+                    }
+                    println!();
+                    response_length = bytes_read;
+                    // TODO: Add frame parsing so we can exit when a valid frame is received.
+                },
+                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                    //println!("Timed out waiting for response");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Error reading from serial port: {:?}", e);
+                    break;
+                }
+            }
+        }
+        return buffer[0..response_length].to_vec();
+    }
+}
+
+fn print_hex(vec: &Vec<u8>) {
+    for byte in vec {
+        print!("0x{:02X} ", byte);
+    }
+    println!(); // newline at the end
+}
+
+
+fn run(port_name: String, region: &Region) {
+    let baud_rate = 230_400;
+
+    println!("Connecting to {}", port_name);
+    let port = serialport::new(port_name, baud_rate)
+        .timeout(Duration::from_millis(500))
+        .open()
+        .expect("Failed to open port");
+
+    let mut zniffer = Zniffer::new(port, *region);
+
+    match zniffer.get_version() {
+        Ok(version) => {
+            println!("Got version:");
+            print_hex(&version);
+        },
+        Err(e) => {
+            eprintln!("Failed to get the version: {:?}", e);
+        }
+    }
+
+    // TODO: Handle potential error when setting the region.
+    let _ = zniffer.set_region();
+
+    let _response = zniffer.start();
+
+    loop {
+        let frame: Vec<u8> = zniffer.get_frames();
+        print_hex(&frame);
+    }
 }
 
 fn main() {
@@ -48,7 +241,7 @@ fn main() {
             println!("Converting '{}' to '{}' as format '{}'", input, output, format);
             // Add conversion logic here
         }
-        Commands::Run { config, debug } => {
+        Commands::Run { config, debug , port, region} => {
             println!("Running with config: {:?}", config);
             println!("Debug mode: {}", debug);
             // Add run logic here
@@ -56,6 +249,8 @@ fn main() {
             for class in zw.cmd_class {
                 println!("{:?}", class.key);
             }
+            println!("Region: {:?}", region);
+            run(port.to_string(), region);
         }
     }
 }
