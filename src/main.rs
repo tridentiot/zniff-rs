@@ -10,6 +10,9 @@ use serialport::SerialPort;
 use crate::types::Frame;
 use crate::zniffer_parser::ParserResult;
 
+use std::sync::mpsc;
+use std::thread;
+
 mod types;
 mod zniffer_parser;
 
@@ -256,21 +259,34 @@ fn run(port_name: String, region: &Region) {
 
     let _ = zniffer.start();
 
-    loop {
-        match zniffer.get_frames() {
-            Ok(frame) => {
-                println!("{:?}", frame);
-                // TODO: Enqueue the frame to let something else process it.
-            },
-            Err(true) => {
-                panic!("Should never happen!");
-            },
-            Err(false) => {
-                println!("Failed to get frame!");
-                return;
+    // We might want to use "let (tx, _) = broadcast::channel(100);" to support multiple receivers.
+    let (tx, rx) = mpsc::channel::<Frame>();
+
+    let parser_thread_handle = thread::spawn(move || {
+        loop {
+            match zniffer.get_frames() {
+                Ok(frame) => {
+                    tx.send(frame).unwrap();
+                },
+                Err(true) => {
+                    panic!("Should never happen!");
+                },
+                Err(false) => {
+                    println!("Failed to get frame!");
+                    return;
+                }
             }
         }
-    }
+    });
+
+    let process_thread_handle = thread::spawn(move || {
+        for frame in rx {
+            println!("{:?}", frame);
+        }
+    });
+
+    parser_thread_handle.join().unwrap();
+    process_thread_handle.join().unwrap();
 }
 
 fn main() {
