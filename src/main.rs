@@ -1,5 +1,4 @@
 mod xml;
-use clap::{Parser, Subcommand};
 use xml::parse_xml;
 use xml::ZwClasses;
 use std::time::Duration;
