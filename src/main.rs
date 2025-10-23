@@ -1,3 +1,6 @@
+mod xml;
+use xml::parse_xml;
+use xml::ZwClasses;
 use std::time::Duration;
 use std::io::{self, Write, Read};
 
@@ -240,6 +243,11 @@ fn main() {
         Commands::Run { config, debug , port, region} => {
             println!("Running with config: {:?}", config);
             println!("Debug mode: {}", debug);
+            // Add run logic here
+            let zw: ZwClasses = parse_xml();
+            for class in zw.cmd_class {
+                println!("{:?}", class.key);
+            }
             println!("Region: {:?}", region);
             run(port.to_string(), region);
         }
