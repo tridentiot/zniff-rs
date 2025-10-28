@@ -3,6 +3,7 @@ use xml::parse_xml;
 use xml::ZwClasses;
 use std::time::Duration;
 use std::io::{self, Write, Read};
+use std::net::TcpListener;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use serialport::SerialPort;
@@ -259,6 +260,10 @@ fn run(port_name: String, region: &Region) {
 
     let _ = zniffer.start();
 
+    // PC Zniffer PTI default port is 4905
+    let listener = TcpListener::bind("192.168.10.100:4905").unwrap();
+    println!("Server listening on port 4905");
+
     // We might want to use "let (tx, _) = broadcast::channel(100);" to support multiple receivers.
     let (tx, rx) = mpsc::channel::<Frame>();
 
@@ -279,14 +284,36 @@ fn run(port_name: String, region: &Region) {
         }
     });
 
-    let process_thread_handle = thread::spawn(move || {
-        for frame in rx {
-            println!("{:?}", frame);
-        }
-    });
+
+    if let Ok((mut stream, addr)) = listener.accept() {
+        println!("Connection received from {}", addr);
+        let process_thread_handle: thread::JoinHandle<()> = thread::spawn(move ||
+        {
+            for mut frame in rx {
+                println!("rx:{:?}", frame);
+
+                match frame.to_pti_vector()
+                {
+                    Ok(pty_frame) =>  {
+
+                        let hex_string: String = pty_frame.iter()
+                                .map(|byte| format!("{:02X}", byte))
+                                .collect::<Vec<String>>()
+                                .join(" ");
+
+                        println!("tx pti:{:?}", hex_string);
+                        stream.write_all(&pty_frame).unwrap();
+                    }
+                    Err(_e) => {
+                        println!("Failed to form PTI packet");
+                    }
+                }
+            }
+        });
+        process_thread_handle.join().unwrap();
+    }
 
     parser_thread_handle.join().unwrap();
-    process_thread_handle.join().unwrap();
 }
 
 fn main() {
