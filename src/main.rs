@@ -13,6 +13,11 @@ use crate::zniffer_parser::ParserResult;
 use std::sync::mpsc;
 use std::thread;
 
+use actix::{Actor, StreamHandler, AsyncContext};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web_actors::ws;
+use tokio::sync::broadcast;
+
 mod types;
 mod zniffer_parser;
 
@@ -227,7 +232,57 @@ fn print_hex(vec: &Vec<u8>) {
 }
 
 
-fn run(port_name: String, region: &Region) {
+struct MyWebSocket {
+    rx: broadcast::Receiver<String>,
+}
+
+impl Actor for MyWebSocket {
+    type Context = ws::WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        let mut rx = self.rx.resubscribe();
+        ctx.run_interval(Duration::from_millis(500), move |act, ctx| {
+            while let Ok(msg) = rx.try_recv() {
+                ctx.text(msg);
+            }
+        });
+    }
+}
+
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWebSocket {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        if let Ok(ws::Message::Ping(msg)) = msg {
+            ctx.pong(&msg);
+        }
+    }
+}
+
+async fn ws_index(req: HttpRequest, stream: web::Payload, tx: web::Data<broadcast::Sender<String>>) -> actix_web::Result<HttpResponse> {
+    let rx = tx.subscribe();
+    ws::start(MyWebSocket { rx }, &req, stream)
+}
+
+async fn index() -> impl Responder {
+    let html = r#"
+    <!DOCTYPE html>
+    <html>
+    <body>
+        <h1>Serial Data</h1>
+        <pre id="output"></pre>
+        <script>
+            const ws = new WebSocket("ws://localhost:3000/ws/");
+            ws.onmessage = (event) => {
+                document.getElementById("output").textContent += event.data + "\n";
+            };
+        </script>
+    </body>
+    </html>
+    "#;
+    HttpResponse::Ok().content_type("text/html").body(html)
+}
+
+async fn run(port_name: String, region: &Region) -> std::io::Result<()> {
+
     let baud_rate = 230_400;
 
     println!("Connecting to {}", port_name);
@@ -260,13 +315,15 @@ fn run(port_name: String, region: &Region) {
     let _ = zniffer.start();
 
     // We might want to use "let (tx, _) = broadcast::channel(100);" to support multiple receivers.
-    let (tx, rx) = mpsc::channel::<Frame>();
+    //let (tx, rx) = mpsc::channel::<Frame>();
+    let (tx, _) = broadcast::channel(100);
 
+    let tx_clone = tx.clone();
     let parser_thread_handle = thread::spawn(move || {
         loop {
             match zniffer.get_frames() {
                 Ok(frame) => {
-                    tx.send(frame).unwrap();
+                    tx_clone.send(frame).unwrap();
                 },
                 Err(true) => {
                     panic!("Should never happen!");
@@ -278,24 +335,39 @@ fn run(port_name: String, region: &Region) {
             }
         }
     });
-
+/*
     let process_thread_handle = thread::spawn(move || {
         for frame in rx {
             println!("{:?}", frame);
         }
     });
+*/
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(tx.clone()))
+            .route("/", web::get().to(index))
+            .route("/ws/", web::get().to(ws_index))
+    })
+    .bind("127.0.0.1:3000")?
+    .run()
+    .await;
 
     parser_thread_handle.join().unwrap();
-    process_thread_handle.join().unwrap();
+    //process_thread_handle.join().unwrap();
+
+    Ok(())
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
         Commands::Convert { input, output, format } => {
             println!("Converting '{}' to '{}' as format '{}'", input, output, format);
             // Add conversion logic here
+            Ok(())
         }
         Commands::Run { config, debug , port, region} => {
             println!("Running with config: {:?}", config);
@@ -306,7 +378,7 @@ fn main() {
                 println!("{:?}", class.key);
             }
             println!("Region: {:?}", region);
-            run(port.to_string(), region);
+            run(port.to_string(), region).await
         }
     }
 }
