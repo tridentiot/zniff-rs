@@ -173,6 +173,7 @@ impl Zniffer {
                     //}
                     //println!();
                     response_length = bytes_read;
+                    print_hex(&buffer[0..response_length].to_vec());
                     // TODO: Add frame parsing so we can exit when a valid frame is received.
                 },
                 Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
