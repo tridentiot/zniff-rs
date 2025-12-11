@@ -26,8 +26,6 @@ The length specifies the length of the command payload.
 
 The payload depends on the command.
 
-List of commands TBD.
-
 ### Radio frames
 
 |  0  | 1    | 2+3       | 3+N     |
@@ -99,6 +97,50 @@ The Z-Wave radio frame.
 #### Counter
 
 TBD.
+
+## Command ID's
+
+### Get Version command
+
+The Get Version command is used for getting the version of the zniffer firmware and the type and version of the chip it is running on.
+
+#### Command format
+
+| 0    | 1          | 2   |
+| :--: | :--------: | :-: |
+| 0x23 |    0x01    |  0  |
+
+#### Command reply
+
+| 0    | 1          | 2   | 3         | 4             | 5     | 6     |
+| :--: | :--------: | :-: | :-------- | :------------ | :---- | :---- |
+| 0x23 |    0x01    |  4  | Chip Type | Chip Revision | Major | Minor |
+
+##### Chip Type
+
+| Type |    Description   |
+| :--: | :--------------- |
+|  20  | Trident IoT CZ20 |
+|  ??  | Silicon Labs 700 |
+|  ??  | Silicon Labs 800 |
+
+### Set Region command
+
+The Set Region command is used to set the region the zniffer should listen on.
+
+#### Command format
+
+| 0    | 1          | 2   | 3      |
+| :--: | :--------: | :-: | :----- |
+| 0x23 |    0x02    |  1  | Region |
+
+##### Region
+
+The Region to use. A list of supported regions can be fetched using the Get Region command.
+
+#### Command reply
+
+None
 
 # Resources
 
