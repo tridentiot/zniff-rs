@@ -1882,6 +1882,8 @@ dependencies = [
  "actix-web",
  "actix-web-actors",
  "clap",
+ "serde",
+ "serde_json",
  "serialport",
  "tokio",
 ]

@@ -10,7 +10,6 @@ use serialport::SerialPort;
 use crate::types::Frame;
 use crate::zniffer_parser::ParserResult;
 
-use std::sync::mpsc;
 use std::thread;
 
 use actix::{Actor, StreamHandler, AsyncContext};
@@ -233,7 +232,7 @@ fn print_hex(vec: &Vec<u8>) {
 
 
 struct MyWebSocket {
-    rx: broadcast::Receiver<String>,
+    rx: broadcast::Receiver<Frame>,
 }
 
 impl Actor for MyWebSocket {
@@ -241,9 +240,10 @@ impl Actor for MyWebSocket {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         let mut rx = self.rx.resubscribe();
-        ctx.run_interval(Duration::from_millis(500), move |act, ctx| {
-            while let Ok(msg) = rx.try_recv() {
-                ctx.text(msg);
+        ctx.run_interval(Duration::from_millis(500), move |_act, ctx| {
+            while let Ok(frame) = rx.try_recv() {
+                let json_string = serde_json::to_string(&frame).unwrap();
+                ctx.text(json_string);
             }
         });
     }
@@ -257,7 +257,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWebSocket {
     }
 }
 
-async fn ws_index(req: HttpRequest, stream: web::Payload, tx: web::Data<broadcast::Sender<String>>) -> actix_web::Result<HttpResponse> {
+async fn ws_index(req: HttpRequest, stream: web::Payload, tx: web::Data<broadcast::Sender<Frame>>) -> actix_web::Result<HttpResponse> {
     let rx = tx.subscribe();
     ws::start(MyWebSocket { rx }, &req, stream)
 }
@@ -342,8 +342,21 @@ async fn run(port_name: String, region: &Region) -> std::io::Result<()> {
         }
     });
 */
+/*
+    let rx = tx.subscribe();
+    let process_thread_handle = thread::spawn(move || {
+        loop {
+            let frame = rx.recv();
+            match frame {
+                Ok(frame) => {
+                    println!("{:?}", frame);
+                }
 
-    HttpServer::new(move || {
+            }
+        }
+    });
+*/
+    let _ = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(tx.clone()))
             .route("/", web::get().to(index))

@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Default, PartialEq)]
+use serde::Serialize;
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Frame {
   pub region: u8,
   pub channel: u8,
