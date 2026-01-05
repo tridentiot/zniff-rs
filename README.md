@@ -1,4 +1,4 @@
-# zniff.rs
+# zniff-rs
 
 This is a from-the-scratch Rust implementation of a Z-Wave packet sniffer service.
 
