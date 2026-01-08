@@ -262,7 +262,7 @@ fn run(port_name: String, region: &Region) {
     let _ = zniffer.start();
 
     // PC Zniffer PTI default port is 4905
-    let listener = TcpListener::bind("192.168.10.100:4905").unwrap();
+    let listener = TcpListener::bind("0.0.0.0:4905").unwrap();
     println!("Server listening on port 4905");
 
     // We might want to use "let (tx, _) = broadcast::channel(100);" to support multiple receivers.
