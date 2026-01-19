@@ -429,7 +429,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         },
         Commands::Parse { input } => {
-            let zw_parser: ZwParser = ZwParser::new();
+            let fd = frame_definition::parse_xml();
+            let zwc = xml::parse_xml();
+            let zw_parser: ZwParser = ZwParser::new(&fd, &zwc);
             zw_parser.parse_str(&input);
             Ok(())
         }

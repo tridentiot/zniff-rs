@@ -1,23 +1,20 @@
-use crate::frame_definition::{FrameDefinition, self};
+use crate::frame_definition::{FrameDefinition};
 use crate::xml::{
-    parse_xml,
     ZwClasses,
     CmdClassCmdChild,
 };
 
-use std::sync::Arc;
-
 #[derive(Debug)]
-pub struct ZwParser {
-    fd: Arc<FrameDefinition>,
-    zwc: Arc<ZwClasses>,
+pub struct ZwParser<'a> {
+    fd: &'a FrameDefinition,
+    zwc: &'a ZwClasses,
 }
 
-impl ZwParser {
-    pub fn new() -> Self {
+impl<'a> ZwParser<'a> {
+    pub fn new(fd: &'a FrameDefinition, zwc: &'a ZwClasses) -> Self {
         ZwParser {
-            fd: Arc::new(frame_definition::parse_xml()),
-            zwc: Arc::new(parse_xml()),
+            fd,
+            zwc,
         }
     }
 
@@ -29,8 +26,6 @@ impl ZwParser {
         };
 
         println!("Frame: {}", hex::encode_upper(&frame));
-
-        let fd = self.fd.as_ref();
 
         fn get_header_type_name(fd: &FrameDefinition, header_type_id: u8) -> String {
             for ds in &fd.define_set {
@@ -62,7 +57,7 @@ impl ZwParser {
 
         let mut byte_counter = 0;
 
-        for base_header in &fd.base_header {
+        for base_header in &self.fd.base_header {
             if base_header.key != key {
                 continue;
             }
@@ -100,11 +95,11 @@ impl ZwParser {
                 byte_counter += n / 8;
             }
 
-            let header_type_name = get_header_type_name(&fd, header_type);
+            let header_type_name = get_header_type_name(&self.fd, header_type);
             println!("Header type: {}", header_type_name);
 
             // Process fields from header
-            for header in &fd.header {
+            for header in &self.fd.header {
                 if header.name == header_type_name.clone().to_uppercase() {
                     //println!("Header: {:?}", header.name);
                     for param in &header.param {
@@ -125,8 +120,7 @@ impl ZwParser {
 
         println!("Updated frame: {}", hex::encode_upper(&frame));
 
-        let zw: &ZwClasses = self.zwc.as_ref();
-        for class in &zw.cmd_class {
+        for class in &self.zwc.cmd_class {
             let key_stripped: &str = class.key.trim_start_matches("0x");
             let cc: u8 = match u8::from_str_radix(key_stripped, 16) {
                 Ok(k) => k,
