@@ -2,7 +2,6 @@ mod frame_definition;
 mod xml;
 use std::time::Duration;
 use std::io::{self, Write, Read};
-use std::net::TcpListener;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use serialport::SerialPort;
@@ -14,16 +13,23 @@ mod zlf;
 
 use crate::zniffer_parser::ParserResult;
 
-use std::sync::mpsc;
-use std::thread;
-
-use std::net::{TcpStream};
-
 mod types;
 mod zniffer_parser;
 
 mod generator;
 use crate::generator::FrameGenerator;
+
+use tokio::{
+    io::{
+        AsyncWriteExt,
+        AsyncReadExt,
+    },
+    net::{
+        TcpListener,
+        TcpStream,
+    },
+    sync::broadcast
+};
 
 #[derive(Parser)]
 #[command(name = "toolbox")]
@@ -258,8 +264,78 @@ fn print_hex(vec: &Vec<u8>) {
     println!(); // newline at the end
 }
 
+async fn handle_client(
+    mut stream: TcpStream,
+    rx: &mut broadcast::Receiver<Frame>,
+) {
+    loop {
+        tokio::select! {
+            result = rx.recv() => {
+                match result {
+                    Ok(mut frame) => {
+                        match frame.to_pti_vector()
+                        {
+                            Ok(pty_frame) =>  {
 
-fn run(port_name: String, region: &Region) {
+                                let _hex_string: String = pty_frame.iter()
+                                        .map(|byte| format!("{:02X}", byte))
+                                        .collect::<Vec<String>>()
+                                        .join(" ");
+
+                                //println!("tx pti:{:?}", hex_string);
+                                if let Err(e) = stream.write_all(&pty_frame).await {
+                                    eprintln!("Client write failed: {e}");
+                                    return;
+                                }
+                            }
+                            Err(_e) => {
+                                println!("Failed to form PTI packet");
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        eprintln!("Client lagged: skipped {n} messages");
+                    }
+                    Err(_) => {
+                        eprintln!("Some receive error happened.");
+                    }
+                }
+            }
+
+
+            // Detect client disconnect by trying to read
+            result = stream.readable() => {
+                if result.is_err() {
+                    // Client dropped connection
+                    eprintln!("Client disconnected");
+                    return;
+                }
+
+                // Attempt a read of 0 bytes to check for EOF
+                let mut buf = [0u8; 1];
+                match stream.try_read(&mut buf) {
+                    Ok(0) => {
+                        // EOF => client disconnected
+                        eprintln!("Client disconnected (EOF)");
+                        return;
+                    }
+                    Ok(_) => {
+                        // The client sent some data, but we don't care.
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        // No real data; ignore
+                    }
+                    Err(e) => {
+                        eprintln!("Read error: {e}");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn run(port_name: String, region: &Region) {
     let baud_rate = 230_400;
 
     println!("Connecting to {}", port_name);
@@ -291,19 +367,15 @@ fn run(port_name: String, region: &Region) {
 
     let _ = zniffer.start();
 
-    // PC Zniffer PTI default port is 4905
-    let listener = TcpListener::bind("0.0.0.0:4905").unwrap();
-    println!("Server listening on port 4905");
+    let (tx, _rx) = broadcast::channel(16);
 
-    // We might want to use "let (tx, _) = broadcast::channel(100);" to support multiple receivers.
-    let (tx, rx) = mpsc::channel::<Frame>();
-
-    let parser_thread_handle = thread::spawn(move || {
+    let tx_clone = tx.clone();
+    tokio::spawn(async move {
         loop {
             match zniffer.get_frames() {
                 Ok(frame) => {
-                    match tx.send(frame) {
-                        Ok(()) => {
+                    match tx_clone.send(frame) {
+                        Ok(_) => {
                             // Successfully sent
                         },
                         Err(e) => {
@@ -323,61 +395,24 @@ fn run(port_name: String, region: &Region) {
         }
     });
 
+    // PC Zniffer PTI default port is 4905
+    let listener = TcpListener::bind("0.0.0.0:4905").await.unwrap();
+    println!("Server listening on port 4905");
 
-    if let Ok((mut stream, addr)) = listener.accept() {
-        println!("Connection received from {}", addr);
-        let process_thread_handle: thread::JoinHandle<()> = thread::spawn(move ||
-        {
-            'pti_loop: for mut frame in rx {
-                println!("rx:{:?}", frame);
+    loop {
+        let (stream, addr) = listener.accept().await.unwrap();
+        println!("Client connected: {addr}");
 
-                match frame.to_pti_vector()
-                {
-                    Ok(pty_frame) =>  {
+        let mut rx = tx.subscribe();
 
-                        let hex_string: String = pty_frame.iter()
-                                .map(|byte| format!("{:02X}", byte))
-                                .collect::<Vec<String>>()
-                                .join(" ");
-
-                        println!("tx pti:{:?}", hex_string);
-                        match stream.write_all(&pty_frame) {
-                            Ok(()) => {
-                                // Successfully sent
-                            },
-                            Err(e) => {
-                                println!("Failed to send PTI packet: {:?}", e);
-                                match e.kind() {
-                                    std::io::ErrorKind::BrokenPipe |
-                                    std::io::ErrorKind::ConnectionAborted |
-                                    std::io::ErrorKind::ConnectionReset => {
-                                        println!("Connection closed by peer");
-                                        break 'pti_loop;
-                                    },
-                                    _ => {
-                                        println!("Unknown I/O error occurred");
-                                        break 'pti_loop;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(_e) => {
-                        println!("Failed to form PTI packet");
-                    }
-                }
-            }
+        tokio::spawn(async move {
+            handle_client(stream, &mut rx).await;
         });
-        process_thread_handle.join().unwrap();
-    }
-
-    match parser_thread_handle.join() {
-        Ok(()) => println!("Parser thread exited normally"),
-        Err(e) => eprintln!("Parser thread panicked: {:?}", e),
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match &cli.command {
@@ -391,14 +426,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Client {  } => {
 
             let addr = "127.0.0.1:9000";
-            let mut stream = TcpStream::connect(addr)?;
+            let mut stream = TcpStream::connect(addr).await.unwrap();
             println!("Connected to {addr}");
 
             let mut buf = [0u8; 8192];
             let mut total = 0usize;
 
             loop {
-                let n = stream.read(&mut buf)?;
+                let n: usize = stream.read(&mut buf).await.unwrap();
                 if n == 0 {
                     println!("Server closed connection. Total bytes: {total}");
                     break;
@@ -425,7 +460,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Debug mode: {}", debug);
             // Add run logic here
             println!("Region: {:?}", region);
-            run(port.to_string(), region);
+            run(port.to_string(), region).await;
             Ok(())
         },
         Commands::Parse { input } => {
