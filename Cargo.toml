@@ -14,3 +14,4 @@ serde-xml-rs = "0.6.0"
 serde_path_to_error = "0.1.20"
 serialport = "4.7.3"
 thiserror = "2.0.17"
+tokio = { version = "1.49.0", features = ["full"] }
