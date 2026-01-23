@@ -319,8 +319,9 @@ async fn handle_client(
                         eprintln!("Client disconnected (EOF)");
                         return;
                     }
-                    Ok(_) => {
+                    Ok(msg) => {
                         // The client sent some data, but we don't care.
+                        println!("Client sent {} bytes, ignoring", msg);
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         // No real data; ignore
