@@ -1,6 +1,5 @@
+mod frame_definition;
 mod xml;
-use xml::parse_xml;
-use xml::ZwClasses;
 use std::time::Duration;
 use std::io::{self, Write, Read};
 use std::net::TcpListener;
@@ -9,13 +8,22 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serialport::SerialPort;
 
 use crate::types::Frame;
+mod zw_parser;
+use zw_parser::ZwParser;
+mod zlf;
+
 use crate::zniffer_parser::ParserResult;
 
 use std::sync::mpsc;
 use std::thread;
 
+use std::net::{TcpStream};
+
 mod types;
 mod zniffer_parser;
+
+mod generator;
+use crate::generator::FrameGenerator;
 
 #[derive(Parser)]
 #[command(name = "toolbox")]
@@ -27,6 +35,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Generate frames
+    Generator {
+        /// From file
+        #[arg(long)]
+        from_file: String,
+        /// Delay in milliseconds between frames
+        #[arg(long)]
+        delay: u16,
+    },
+
+    /// Connect to a generator, server or proxy.
+    Client {
+
+    },
+
     /// Converts a file from one format to another
     Convert {
         /// Input file
@@ -59,6 +82,13 @@ enum Commands {
         /// Z-Wave region
         #[arg(long, value_enum)]
         region: Region,
+    },
+
+    /// Parses a Z-Wave frame from a string input.
+    Parse {
+        /// String representing the Z-Wave frame
+        #[arg(long)]
+        input: String,
     },
 }
 
@@ -186,7 +216,7 @@ impl Zniffer {
                 }
             }
         }
-        return buffer[0..response_length].to_vec();
+        buffer[0..response_length].to_vec()
     }
 
     fn get_frames(&mut self) -> Result<Frame, bool> {
@@ -272,7 +302,15 @@ fn run(port_name: String, region: &Region) {
         loop {
             match zniffer.get_frames() {
                 Ok(frame) => {
-                    tx.send(frame).unwrap();
+                    match tx.send(frame) {
+                        Ok(()) => {
+                            // Successfully sent
+                        },
+                        Err(e) => {
+                            println!("Failed to send frame to channel: {:?}", e);
+                            return;
+                        }
+                    }
                 },
                 Err(true) => {
                     panic!("Should never happen!");
@@ -290,7 +328,7 @@ fn run(port_name: String, region: &Region) {
         println!("Connection received from {}", addr);
         let process_thread_handle: thread::JoinHandle<()> = thread::spawn(move ||
         {
-            for mut frame in rx {
+            'pti_loop: for mut frame in rx {
                 println!("rx:{:?}", frame);
 
                 match frame.to_pti_vector()
@@ -303,7 +341,26 @@ fn run(port_name: String, region: &Region) {
                                 .join(" ");
 
                         println!("tx pti:{:?}", hex_string);
-                        stream.write_all(&pty_frame).unwrap();
+                        match stream.write_all(&pty_frame) {
+                            Ok(()) => {
+                                // Successfully sent
+                            },
+                            Err(e) => {
+                                println!("Failed to send PTI packet: {:?}", e);
+                                match e.kind() {
+                                    std::io::ErrorKind::BrokenPipe |
+                                    std::io::ErrorKind::ConnectionAborted |
+                                    std::io::ErrorKind::ConnectionReset => {
+                                        println!("Connection closed by peer");
+                                        break 'pti_loop;
+                                    },
+                                    _ => {
+                                        println!("Unknown I/O error occurred");
+                                        break 'pti_loop;
+                                    }
+                                }
+                            }
+                        }
                     }
                     Err(_e) => {
                         println!("Failed to form PTI packet");
@@ -314,27 +371,69 @@ fn run(port_name: String, region: &Region) {
         process_thread_handle.join().unwrap();
     }
 
-    parser_thread_handle.join().unwrap();
+    match parser_thread_handle.join() {
+        Ok(()) => println!("Parser thread exited normally"),
+        Err(e) => eprintln!("Parser thread panicked: {:?}", e),
+    }
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match &cli.command {
+        Commands::Generator { from_file, delay } => {
+            let generator: FrameGenerator = FrameGenerator::new(from_file.to_string(), *delay)?;
+
+            generator.run()?;
+
+            Ok(())
+        },
+        Commands::Client {  } => {
+
+            let addr = "127.0.0.1:9000";
+            let mut stream = TcpStream::connect(addr)?;
+            println!("Connected to {addr}");
+
+            let mut buf = [0u8; 8192];
+            let mut total = 0usize;
+
+            loop {
+                let n = stream.read(&mut buf)?;
+                if n == 0 {
+                    println!("Server closed connection. Total bytes: {total}");
+                    break;
+                }
+                total += n;
+                // Print as hex (first 32 bytes for brevity)
+                let preview = &buf[..n];
+                    print!("recv {n} bytes: ");
+                for b in preview {
+                    print!("{:02X} ", b);
+                }
+                println!();
+            }
+
+            Ok(())
+        },
         Commands::Convert { input, output, format } => {
             println!("Converting '{}' to '{}' as format '{}'", input, output, format);
             // Add conversion logic here
+            Ok(())
         }
         Commands::Run { config, debug , port, region} => {
             println!("Running with config: {:?}", config);
             println!("Debug mode: {}", debug);
             // Add run logic here
-            let zw: ZwClasses = parse_xml();
-            for class in zw.cmd_class {
-                println!("{:?}", class.key);
-            }
             println!("Region: {:?}", region);
             run(port.to_string(), region);
+            Ok(())
+        },
+        Commands::Parse { input } => {
+            let fd = frame_definition::parse_xml();
+            let zwc = xml::parse_xml();
+            let zw_parser: ZwParser = ZwParser::new(&fd, &zwc);
+            zw_parser.parse_str(&input);
+            Ok(())
         }
     }
 }

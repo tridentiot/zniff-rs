@@ -1,0 +1,761 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2024 Silicon Laboratories Inc <https://www.silabs.com/>
+
+SPDX-License-Identifier: BSD-3-Clause
+-->
+<FrameDefinition>
+  <RadioFrequency Name="EU" Code="0" BaseHeader="0" Text="868.4 MHz (EU)"/>
+  <RadioFrequency Name="US" Code="1" BaseHeader="0" Text="908.4 MHz (US)"/>
+  <RadioFrequency Name="ANZ" Code="2" BaseHeader="0" Text="921.4 MHz (ANZ)"/>
+  <RadioFrequency Name="HK" Code="3" BaseHeader="0" Text="919.8 MHz (HK)"/>
+  <RadioFrequency Name="TF1_EU" Code="4" BaseHeader="0" Text="866.42 MHz (TF1 EU)"/>
+  <RadioFrequency Name="TF2_EU" Code="5" BaseHeader="0" Text="870.42 MHz (TF2 EU)"/>
+  <RadioFrequency Name="TF3_US" Code="6" BaseHeader="0" Text="906.42 MHz (TF3 US)"/>
+  <RadioFrequency Name="TF4_US" Code="7" BaseHeader="0" Text="910.42 MHz (TF4 US)"/>
+  <RadioFrequency Name="MY" Code="8" BaseHeader="0" Text="868.2 MHz (MY)"/>
+  <RadioFrequency Name="IN" Code="9" BaseHeader="0" Text="865.22 MHz (IN)"/>
+  <RadioFrequency Name="JP" Code="10" BaseHeader="1" Text="926.3 MHz (JP)"/>
+  <RadioFrequency Name="TF5" Code="11" BaseHeader="0" Text="878 MHz (TF5)"/>
+  <RadioFrequency Name="TF6" Code="12" BaseHeader="0" Text="882 MHz (TF6)"/>
+  <RadioFrequency Name="TF7" Code="13" BaseHeader="0" Text="886 MHz (TF7)"/>
+  <RadioFrequency Name="TF8_3CH" Code="14" BaseHeader="1" Text="932 MHz (TF8 3CH)"/>
+  <RadioFrequency Name="TF9_3CH" Code="15" BaseHeader="1" Text="940 MHz (TF9 3CH)"/>
+  <RadioFrequency Name="TF10_3CH" Code="16" BaseHeader="1" Text="840 MHz (TF10 3CH)"/>
+  <RadioFrequency Name="TF11_3CH" Code="17" BaseHeader="1" Text="850 MHz (TF11 3CH)"/>
+  <RadioFrequency Name="JP_32MHz" Code="18" BaseHeader="1" Text="951.1 MHz (JP 32MHz)"/>
+  <RadioFrequency Name="JP_OLD" Code="19" BaseHeader="1" Text="950.95 MHz (JP)"/>
+  <RadioFrequency Name="TF_835_3CH" Code="24" BaseHeader="1" Text="835 MHz (TF835 3CH)"/>
+  <RadioFrequency Name="RU" Code="26" BaseHeader="0" Text="869.0 MHz (RU)"/>
+  <RadioFrequency Name="IL" Code="27" BaseHeader="0" Text="916 MHz (IL)"/>
+  <RadioFrequency Name="KR" Code="28" BaseHeader="1" Text="919.7 MHz (KR)"/>
+  <BaseHeader Key="0" Name="BASIC" Text="Basic Frame Layout">
+    <Param Order="0" Name="HomeID" Text="Home ID" Type="HEX" Bits="32"/>
+    <Param Order="1" Name="SourceNodeID" Text="Source Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="2" Name="Properties1" Text="Properties1" Type="HEX" Bits="8">
+      <Param Order="0" Name="HeaderType" Text="Header Type" Type="HEX" Bits="4" Defines="HeaderType"/>
+      <Param Order="1" Name="SpeedModified" Text="Speed Modified" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="LowPower" Text="Low Power" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="Ack" Text="Ack" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="Routed" Text="Routed" Type="BOOLEAN" Bits="1"/>
+    </Param>
+    <Param Order="3" Name="Properties2" Text="Properties2" Type="HEX" Bits="8">
+      <Param Order="0" Name="SequenceNumber" Text="Sequence Number" Type="NUMBER" Bits="4"/>
+      <Param Order="1" Name="Reserved2" Text="Reserved" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="SourceWakeupBeam250ms" Text="Source Wakeup Beam 250ms" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="WakeupSourceBeam1000ms" Text="Wakeup Source Beam 1000ms" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="SUCPresent" Text="SUC Present" Type="BOOLEAN" Bits="1"/>
+    </Param>
+    <Param Order="4" Name="Length" Text="Length" Type="NUMBER" Bits="8"/>
+    <HomeId Ref="HomeID"/>
+    <Source Ref="SourceNodeID"/>
+    <HeaderType Ref="Properties1.HeaderType"/>
+    <IsLTX Ref="Properties1.LowPower"/>
+	<SequenceNumber Ref="Properties2.SequenceNumber"/>
+  </BaseHeader>
+  <BaseHeader Key="1" Name="BASIC24" Text="Basic Frame Layout (24)">
+    <Param Order="0" Name="HomeID" Text="Home ID" Type="HEX" Bits="32"/>
+    <Param Order="1" Name="SourceNodeID" Text="Source Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="2" Name="Properties1" Text="Properties1" Type="HEX" Bits="8">
+      <Param Order="0" Name="HeaderType" Text="Header Type" Type="HEX" Bits="4" Defines="HeaderType"/>
+      <Param Order="1" Name="SpeedModified" Text="Speed Modified" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="SUCPresent" Text="SUC Present" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="LowPower" Text="Low Power" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="Ack" Text="Ack" Type="BOOLEAN" Bits="1"/>
+    </Param>
+    <Param Order="3" Name="Properties2" Text="Properties2" Type="HEX" Bits="8">
+      <Param Order="0" Name="Reserved2" Text="Reserved" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SourceWakeup" Text="Source Wakeup" Type="HEX" Bits="3"/>
+      <Param Order="2" Name="Extended" Text="Extended" Type="BOOLEAN" Bits="1"/>
+    </Param>
+    <Param Order="4" Name="Length" Text="Length" Type="NUMBER" Bits="8"/>
+    <Param Order="5" Name="SequenceNumber" Text="Sequence Number" Type="HEX" Bits="8"/>
+    <HomeId Ref="HomeID"/>
+    <Source Ref="SourceNodeID"/>
+    <HeaderType Ref="Properties1.HeaderType"/>
+    <IsLTX Ref="Properties1.LowPower"/>
+	<SequenceNumber Ref="SequenceNumber"/>
+  </BaseHeader>
+  <BaseHeader Key="2" Name="BASICLR" Text="Basic Long Range Frame Layout">
+    <Param Order="0" Name="HomeID" Text="Home ID" Type="HEX" Bits="32"/>
+    <Param Order="1" Name="Properties1" Text="Properties1" Type="HEX" Bits="24">
+      <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NUMBER" Bits="12"/>
+      <Param Order="1" Name="SourceNodeID" Text="Source Node ID" Type="NUMBER" Bits="12"/>
+    </Param>
+    <Param Order="2" Name="Length" Text="Length" Type="NUMBER" Bits="8"/>
+    <Param Order="3" Name="Properties2" Text="Properties2" Type="HEX" Bits="8">
+	  <Param Order="0" Name="HeaderType" Text="Header Type" Type="HEX" Bits="3" Defines="HeaderType"/>
+      <Param Order="1" Name="Reserved1" Text="Reserved" Type="HEX" Bits="3"/>
+      <Param Order="2" Name="Extended" Text="Extended" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="Ack" Text="Ack" Type="BOOLEAN" Bits="1"/>    
+	</Param>
+    <Param Order="4" Name="SequenceNumber" Text="Sequence Number" Type="HEX" Bits="8"/>
+    <Param Order="5" Name="NoiseFloor" Text="Noise Floor" Type="HEX" Bits="8"/>
+    <Param Order="6" Name="TxPower" Text="Tx Power" Type="HEX" Bits="8"/>
+    <HomeId Ref="HomeID"/>
+    <Source Ref="Properties1.SourceNodeID"/>
+    <Destination Ref="Properties1.DestinationNodeID"/>
+    <HeaderType Ref="Properties2.HeaderType"/>
+    <IsLTX Ref="Properties2.Reserved1"/>
+	<SequenceNumber Ref="SequenceNumber"/>
+  </BaseHeader>
+  <Header Key="10" Name="BROADCAST" Text="Broadcast" BaseHeaderKey="0" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties1.Routed" ParamHexValue="0x00"/>
+    <Validation ParamName="DestinationNodeID" ParamHexValue="0xFF"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="11" Name="BROADCAST24" Text="Broadcast" BaseHeaderKey="1" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="ExtensionType" Text="Extension Type" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="2" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties3.ExtensionLength" OptRef="Properties2.Extended"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x01"/>
+    <Validation ParamName="DestinationNodeID" ParamHexValue="0xFF"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="72" Name="BROADCASTLR" Text="Broadcast" BaseHeaderKey="2" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+   	<Param Order="0" Name="Properties3" Text="Properties3" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="Extension Type" Text="Extension Type" Type="HEX" Bits="3"/>
+      <Param Order="3" Name="Reserved" Text="Reserved" Type="HEX" Bits="1"/>
+    </Param>
+    <Param Order="1" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties3.ExtensionLength" OptRef="Properties2.Extended"/>
+	<Validation ParamName="Properties2.HeaderType" ParamHexValue="0x01"/>
+	<Validation ParamName="Properties1.DestinationNodeID" ParamHexValue="0xFFF"/>
+  </Header>
+  <Header Key="13" Name="SINGLECAST" Text="Singlecast" BaseHeaderKey="0" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties1.Routed" ParamHexValue="0x00"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="14" Name="SINGLECAST24" Text="Singlecast" BaseHeaderKey="1" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="ExtensionType" Text="Extension Type" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="2" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties3.ExtensionLength" OptRef="Properties2.Extended"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x01"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="70" Name="SINGLECASTLR" Text="Singlecast" BaseHeaderKey="2" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+   	<Param Order="0" Name="Properties3" Text="Properties3" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="Extension Type" Text="Extension Type" Type="HEX" Bits="3"/>
+      <Param Order="3" Name="Reserved" Text="Reserved" Type="HEX" Bits="1"/>
+    </Param>
+    <Param Order="1" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties3.ExtensionLength" OptRef="Properties2.Extended"/>
+	<Validation ParamName="Properties2.HeaderType" ParamHexValue="0x01"/>
+  </Header>
+  <Header Key="16" Name="MULTICAST" Text="Multicast" BaseHeaderKey="0" IsAck="false" IsError="false" IsMulticast="true" IsRouted="false">
+    <Param Order="0" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="NumberOfMaskBytes" Text="Number Of Mask Bytes" Type="NUMBER" Bits="5"/>
+      <Param Order="1" Name="AddressOffset" Text="Address Offset" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="1" Name="MaskByte" Text="Mask Byte" Type="BITMASK" Bits="8" SizeRef="Properties3.NumberOfMaskBytes"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x02"/>
+    <Validation ParamName="Properties1.Ack" ParamHexValue="0x00"/>
+    <Validation ParamName="Properties1.Routed" ParamHexValue="0x00"/>
+    <Destination>
+      <Destinations Ref="MaskByte" SizeRef="Properties3.NumberOfMaskBytes" IsBitmask="true" SizeCorrection="0"/>
+    </Destination>
+  </Header>
+  <Header Key="17" Name="MULTICAST24" Text="Multicast" BaseHeaderKey="1" IsAck="false" IsError="false" IsMulticast="true" IsRouted="false">
+    <Param Order="0" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="NumberOfMaskBytes" Text="Number Of Mask Bytes" Type="NUMBER" Bits="5"/>
+      <Param Order="1" Name="AddressOffset" Text="Address Offset" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="1" Name="MaskByte" Text="Mask Byte" Type="BITMASK" Bits="8" SizeRef="Properties3.NumberOfMaskBytes"/>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="ExtensionType" Text="Extension Type" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties4.ExtensionLength" OptRef="Properties2.Extended"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x02"/>
+    <Validation ParamName="Properties1.Ack" ParamHexValue="0x00"/>
+    <Destination>
+      <Destinations Ref="MaskByte" SizeRef="Properties3.NumberOfMaskBytes" IsBitmask="true" SizeCorrection="0"/>
+    </Destination>
+  </Header>
+  <Header Key="19" Name="TRANSFER_ACKNOWLEDGE" Text="Ack" BaseHeaderKey="0" IsAck="true" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x03"/>
+    <Validation ParamName="Properties1.Ack" ParamHexValue="0x00"/>
+    <Validation ParamName="Properties1.Routed" ParamHexValue="0x00"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="20" Name="TRANSFER_ACKNOWLEDGE24" Text="Ack" BaseHeaderKey="1" IsAck="true" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="ExtensionType" Text="Extension Type" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="2" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties3.ExtensionLength" OptRef="Properties2.Extended"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x03"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="71" Name="TRANSFER_ACKNOWLEDGELR" Text="Ack" BaseHeaderKey="2" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="ReceivedRssi" Text="Received RSSI" Type="HEX" Bits="8"/>
+	<Validation ParamName="Properties2.HeaderType" ParamHexValue="0x03"/>
+  </Header>
+  <Header Key="22" Name="ROUTED_SINGLECAST" Text="Routed Singlecast" BaseHeaderKey="0" IsAck="false" IsError="false" IsMulticast="false" IsRouted="true">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="RoutedAcknowledge" Text="Routed Acknowledge" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="RoutedError" Text="Routed Error" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="ExtendedHeaderPresent" Text="Extended Header Present" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="RoutedSpeedModified" Text="Routed Speed Modified" Type="BOOLEAN" Bits="1"/>
+      <Param Order="5" Name="Reserved" Text="Reserved" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="Hops" Text="Hops" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Repeaters" Text="Repeaters" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="Repeater" Text="Repeaters" Type="NODE_NUMBER" Bits="8" SizeRef="Properties4.Repeaters"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8" OptRef="Properties3.ExtendedHeaderPresent">
+      <Param Order="0" Name="ExtendedHeaderType" Text="Extended Header Type" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="ExtendedHeaderBodyLength" Text="Extended Header Body Length" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="ExtendedHeaderBody" Text="Extended Header Body" Type="HEX" Bits="8" SizeRef="Properties5.ExtendedHeaderBodyLength" OptRef="Properties3.ExtendedHeaderPresent"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties1.Routed" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.Direction" ParamHexValue="0x00"/>
+    <Validation ParamName="Properties3.RoutedAcknowledge" ParamHexValue="0x00"/>
+    <Validation ParamName="Properties3.RoutedError" ParamHexValue="0x00"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+    <Hops Ref="Properties4.Hops"/>
+    <Repeaters Ref="Repeater" SizeRef="Properties4.Repeaters" IsBitmask="false" SizeCorrection="0"/>
+  </Header>
+  <Header Key="23" Name="ROUTED_SINGLECAST24" Text="Routed Singlecast" BaseHeaderKey="1" IsAck="false" IsError="false" IsMulticast="false" IsRouted="true">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="RoutedAcknowledge" Text="Routed Acknowledge" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="RoutedError" Text="Routed Error" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="Reserved" Text="Reserved" Type="HEX" Bits="5"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="Hops" Text="Hops" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Repeaters" Text="Repeaters" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="Repeater" Text="Repeaters" Type="NODE_NUMBER" Bits="8" SizeRef="Properties4.Repeaters"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8">
+      <Param Order="0" Name="DestinationWakeup" Text="Destination Wakeup" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Reserved1" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Properties6" Text="Properties6" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="ExtensionType" Text="Extension Type" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="6" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties6.ExtensionLength" OptRef="Properties2.Extended"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x08"/>
+    <Validation ParamName="Properties3.Direction" ParamHexValue="0x00"/>
+    <Validation ParamName="Properties3.RoutedAcknowledge" ParamHexValue="0x00"/>
+    <Validation ParamName="Properties3.RoutedError" ParamHexValue="0x00"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+    <Hops Ref="Properties4.Hops"/>
+    <Repeaters Ref="Repeater" SizeRef="Properties4.Repeaters" IsBitmask="false" SizeCorrection="0"/>
+  </Header>
+  <Header Key="25" Name="ROUTED_ACKNOWLEDGE" Text="Routed Ack" BaseHeaderKey="0" IsAck="true" IsError="false" IsMulticast="false" IsRouted="true">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="RoutedAcknowledge" Text="Routed Acknowledge" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="RoutedError" Text="Routed Error" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="ExtendedHeaderPresent" Text="Extended Header Present" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="RoutedSpeedModified" Text="Routed Speed Modified" Type="BOOLEAN" Bits="1"/>
+      <Param Order="5" Name="Reserved" Text="Reserved" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="Hops" Text="Hops" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Repeaters" Text="Repeaters" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="Repeater" Text="Repeaters" Type="NODE_NUMBER" Bits="8" SizeRef="Properties4.Repeaters"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8" OptRef="Properties3.ExtendedHeaderPresent">
+      <Param Order="0" Name="ExtendedHeaderType" Text="Extended Header Type" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="ExtendedHeaderBodyLength" Text="Extended Header Body Length" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="ExtendedHeaderBody" Text="Extended Header Body" Type="HEX" Bits="8" SizeRef="Properties5.ExtendedHeaderBodyLength" OptRef="Properties3.ExtendedHeaderPresent"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties1.Routed" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.Direction" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.RoutedAcknowledge" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.RoutedError" ParamHexValue="0x00"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+    <Hops Ref="Properties4.Hops"/>
+    <Repeaters Ref="Repeater" SizeRef="Properties4.Repeaters" IsBitmask="false" SizeCorrection="0"/>
+  </Header>
+  <Header Key="26" Name="ROUTED_ACKNOWLEDGE24" Text="Routed Ack" BaseHeaderKey="1" IsAck="true" IsError="false" IsMulticast="false" IsRouted="true">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="RoutedAcknowledge" Text="Routed Acknowledge" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="RoutedError" Text="Routed Error" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="Reserved" Text="Reserved" Type="HEX" Bits="5"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="Hops" Text="Hops" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Repeaters" Text="Repeaters" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="Repeater" Text="Repeaters" Type="NODE_NUMBER" Bits="8" SizeRef="Properties4.Repeaters"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="ExtensionType" Text="Extension Type" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties5.ExtensionLength" OptRef="Properties2.Extended"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x08"/>
+    <Validation ParamName="Properties3.Direction" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.RoutedAcknowledge" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.RoutedError" ParamHexValue="0x00"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+    <Hops Ref="Properties4.Hops"/>
+    <Repeaters Ref="Repeater" SizeRef="Properties4.Repeaters" IsBitmask="false" SizeCorrection="0"/>
+  </Header>
+  <Header Key="28" Name="ROUTED_ERROR" Text="Routed Error" BaseHeaderKey="0" IsAck="false" IsError="true" IsMulticast="false" IsRouted="true">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="RoutedAcknowledge" Text="Routed Acknowledge" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="RoutedError" Text="Routed Error" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="ExtendedHeaderPresent" Text="Extended Header Present" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="FailedHop" Text="Failed Hop" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="Hops" Text="Hops" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Repeaters" Text="Repeaters" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="Repeater" Text="Repeaters" Type="NODE_NUMBER" Bits="8" SizeRef="Properties4.Repeaters"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8" OptRef="Properties3.ExtendedHeaderPresent">
+      <Param Order="0" Name="ExtendedHeaderType" Text="Extended Header Type" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="ExtendedHeaderBodyLength" Text="Extended Header Body Length" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="ExtendedHeaderBody" Text="Extended Header Body" Type="HEX" Bits="8" SizeRef="Properties5.ExtendedHeaderBodyLength" OptRef="Properties3.ExtendedHeaderPresent"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties1.Routed" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.Direction" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.RoutedAcknowledge" ParamHexValue="0x00"/>
+    <Validation ParamName="Properties3.RoutedError" ParamHexValue="0x01"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+    <Hops Ref="Properties4.Hops"/>
+    <Repeaters Ref="Repeater" SizeRef="Properties4.Repeaters" IsBitmask="false" SizeCorrection="0"/>
+  </Header>
+  <Header Key="29" Name="ROUTED_ERROR24" Text="Routed Error" BaseHeaderKey="1" IsAck="false" IsError="true" IsMulticast="false" IsRouted="true">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="RoutedAcknowledge" Text="Routed Acknowledge" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="RoutedError" Text="Routed Error" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="Reserved" Text="Reserved" Type="HEX" Bits="1"/>
+      <Param Order="4" Name="FailedHop" Text="Failed Hop" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="Hops" Text="Hops" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Repeaters" Text="Repeaters" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="Repeater" Text="Repeaters" Type="NODE_NUMBER" Bits="8" SizeRef="Properties4.Repeaters"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8" OptRef="Properties2.Extended">
+      <Param Order="0" Name="ExtensionLength" Text="Extension Length" Type="HEX" Bits="3"/>
+      <Param Order="1" Name="Discard" Text="Discard" Type="HEX" Bits="1"/>
+      <Param Order="2" Name="ExtensionType" Text="Extension Type" Type="NUMBER" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Extension" Text="Extension" Type="HEX" Bits="8" SizeRef="Properties5.ExtensionLength" OptRef="Properties2.Extended"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x08"/>
+    <Validation ParamName="Properties3.Direction" ParamHexValue="0x01"/>
+    <Validation ParamName="Properties3.RoutedAcknowledge" ParamHexValue="0x00"/>
+    <Validation ParamName="Properties3.RoutedError" ParamHexValue="0x01"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+    <Hops Ref="Properties4.Hops"/>
+    <Repeaters Ref="Repeater" SizeRef="Properties4.Repeaters" IsBitmask="false" SizeCorrection="0"/>
+  </Header>
+  <Header Key="31" Name="FLOODED" Text="Zensor Net" BaseHeaderKey="0" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="ZensorNetID_MSB" Text="ZensorNet ID (MSB)" Type="HEX" Bits="8"/>
+    <Param Order="2" Name="ZensorNetID_LSB" Text="ZensorNet ID (LSB)" Type="HEX" Bits="8"/>
+    <Param Order="3" Name="SourceZensorID" Text="Source Zensor ID" Type="HEX" Bits="8"/>
+    <Param Order="4" Name="DestinationZensorID" Text="Destination Zensor ID" Type="HEX" Bits="8"/>
+    <Param Order="5" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="FloodCount" Text="Flood count" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Reserved" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="6" Name="ZensorFrameID_MSB" Text="Zensor Frame ID (MSB)" Type="HEX" Bits="8"/>
+    <Param Order="7" Name="ZensorFrameID_LSB" Text="Zensor Frame ID (LSB)" Type="HEX" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x04"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="32" Name="FLOODED24" Text="Zensor Net" BaseHeaderKey="1" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="ZensorNetID_MSB" Text="ZensorNet ID (MSB)" Type="HEX" Bits="8"/>
+    <Param Order="2" Name="ZensorNetID_LSB" Text="ZensorNet ID (LSB)" Type="HEX" Bits="8"/>
+    <Param Order="3" Name="SourceZensorID" Text="Source Zensor ID" Type="HEX" Bits="8"/>
+    <Param Order="4" Name="DestinationZensorID" Text="Destination Zensor ID" Type="HEX" Bits="8"/>
+    <Param Order="5" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="FloodCount" Text="Flood count" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="Reserved" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="6" Name="ZensorFrameID_MSB" Text="Zensor Frame ID (MSB)" Type="HEX" Bits="8"/>
+    <Param Order="7" Name="ZensorFrameID_LSB" Text="Zensor Frame ID (LSB)" Type="HEX" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x04"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="33" Name="EXPLORER_NORMAL" Text="Explorer Normal" BaseHeaderKey="0" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="ExploreCommandType" Text="Explore Command Type" Type="HEX" Bits="5" Defines="ExploreCommandType"/>
+      <Param Order="1" Name="Version" Text="Version" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="SourceRouted" Text="Source Routed" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="Stop" Text="Stop" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="StopReq" Text="Stop Req" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="Reserved" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="SessionTxRandomInterval" Text="Session Tx Random Interval" Type="HEX" Bits="8"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8">
+      <Param Order="0" Name="RepeaterCount" Text="Repeater Count" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SessionTTL" Text="Session TTL" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Repeater0" Text="Repeater 0" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="6" Name="Repeater1" Text="Repeater 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="7" Name="Repeater2" Text="Repeater 2" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="8" Name="Repeater3" Text="Repeater 3" Type="NODE_NUMBER" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x05"/>
+    <Validation ParamName="Properties3.ExploreCommandType" ParamHexValue="0x00"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="34" Name="EXPLORER_NORMAL24" Text="Explorer Normal" BaseHeaderKey="1" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="ExploreCommandType" Text="Explore Command Type" Type="HEX" Bits="5" Defines="ExploreCommandType"/>
+      <Param Order="1" Name="Version" Text="Version" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="SourceRouted" Text="Source Routed" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="Stop" Text="Stop" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="StopReq" Text="Stop Req" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="Reserved" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="SessionTxRandomInterval" Text="Session Tx Random Interval" Type="HEX" Bits="8"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8">
+      <Param Order="0" Name="RepeaterCount" Text="Repeater Count" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SessionTTL" Text="Session TTL" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Repeater0" Text="Repeater 0" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="6" Name="Repeater1" Text="Repeater 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="7" Name="Repeater2" Text="Repeater 2" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="8" Name="Repeater3" Text="Repeater 3" Type="NODE_NUMBER" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x05"/>
+    <Validation ParamName="Properties3.ExploreCommandType" ParamHexValue="0x00"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="35" Name="EXPLORER_SEARCH_RESULT" Text="Explorer Search Result" BaseHeaderKey="0" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="ExploreCommandType" Text="Explore Command Type" Type="HEX" Bits="5" Defines="ExploreCommandType"/>
+      <Param Order="1" Name="Version" Text="Version" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="SourceRouted" Text="Source Routed" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="Stop" Text="Stop" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="StopReq" Text="Stop Req" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="Reserved" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="SessionTxRandomInterval" Text="Session Tx Random Interval" Type="HEX" Bits="8"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8">
+      <Param Order="0" Name="RepeaterCount" Text="Repeater Count" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SessionTTL" Text="Session TTL" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Repeater0" Text="Repeater 0" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="6" Name="Repeater1" Text="Repeater 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="7" Name="Repeater2" Text="Repeater 2" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="8" Name="Repeater3" Text="Repeater 3" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="9" Name="NodeID" Text="Node ID" Type="HEX" Bits="8"/>
+    <Param Order="10" Name="FrameHandle" Text="Frame Handle" Type="HEX" Bits="8"/>
+    <Param Order="11" Name="Properties6" Text="Properties6" Type="HEX" Bits="8">
+      <Param Order="0" Name="SRepeaterCount " Text="SRepeater Count " Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SSessionTTL" Text="Session TTL" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="12" Name="SRepeater0" Text="SRepeater 0" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="13" Name="SRepeater1" Text="SRepeater 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="14" Name="SRepeater2" Text="SRepeater 2" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="15" Name="SRepeater3" Text="SRepeater 3" Type="NODE_NUMBER" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x05"/>
+    <Validation ParamName="Properties3.ExploreCommandType" ParamHexValue="0x02"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="36" Name="EXPLORER_SEARCH_RESULT24" Text="Explorer Search Result" BaseHeaderKey="1" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="ExploreCommandType" Text="Explore Command Type" Type="HEX" Bits="5" Defines="ExploreCommandType"/>
+      <Param Order="1" Name="Version" Text="Version" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="SourceRouted" Text="Source Routed" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="Stop" Text="Stop" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="StopReq" Text="Stop Req" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="Reserved" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="SessionTxRandomInterval" Text="Session Tx Random Interval" Type="HEX" Bits="8"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8">
+      <Param Order="0" Name="RepeaterCount" Text="Repeater Count" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SessionTTL" Text="Session TTL" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Repeater0" Text="Repeater 0" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="6" Name="Repeater1" Text="Repeater 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="7" Name="Repeater2" Text="Repeater 2" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="8" Name="Repeater3" Text="Repeater 3" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="9" Name="NodeID" Text="Node ID" Type="HEX" Bits="8"/>
+    <Param Order="10" Name="FrameHandle" Text="Frame Handle" Type="HEX" Bits="8"/>
+    <Param Order="11" Name="Properties6" Text="Properties6" Type="HEX" Bits="8">
+      <Param Order="0" Name="SRepeaterCount " Text="SRepeater Count " Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SSessionTTL" Text="Session TTL" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="12" Name="SRepeater0" Text="SRepeater 0" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="13" Name="SRepeater1" Text="SRepeater 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="14" Name="SRepeater2" Text="SRepeater 2" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="15" Name="SRepeater3" Text="SRepeater 3" Type="NODE_NUMBER" Bits="8"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x05"/>
+    <Validation ParamName="Properties3.ExploreCommandType" ParamHexValue="0x02"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="37" Name="EXPLORER_AUTOINCLUSION" Text="Explorer Autoinclusion" BaseHeaderKey="0" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="ExploreCommandType" Text="Explore Command Type" Type="HEX" Bits="5" Defines="ExploreCommandType"/>
+      <Param Order="1" Name="Version" Text="Version" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="SourceRouted" Text="Source Routed" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="Stop" Text="Stop" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="StopReq" Text="Stop Req" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="Reserved1" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="SessionTxRandomInterval" Text="Session Tx Random Interval" Type="HEX" Bits="8"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8">
+      <Param Order="0" Name="RepeaterCount" Text="Repeater Count" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SessionTTL" Text="Session TTL" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Repeater0" Text="Repeater 0" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="6" Name="Repeater1" Text="Repeater 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="7" Name="Repeater2" Text="Repeater 2" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="8" Name="Repeater3" Text="Repeater 3" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="9" Name="NetworkHomeID" Text="Network Home ID" Type="HEX" Bits="32"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x05"/>
+    <Validation ParamName="Properties3.ExploreCommandType" ParamHexValue="0x01"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="38" Name="EXPLORER_AUTOINCLUSION24" Text="Explorer Autoinclusion" BaseHeaderKey="1" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="1" Name="Properties3" Text="Properties3" Type="HEX" Bits="8">
+      <Param Order="0" Name="ExploreCommandType" Text="Explore Command Type" Type="HEX" Bits="5" Defines="ExploreCommandType"/>
+      <Param Order="1" Name="Version" Text="Version" Type="HEX" Bits="3"/>
+    </Param>
+    <Param Order="2" Name="Properties4" Text="Properties4" Type="HEX" Bits="8">
+      <Param Order="0" Name="SourceRouted" Text="Source Routed" Type="BOOLEAN" Bits="1"/>
+      <Param Order="1" Name="Direction" Text="Direction" Type="BOOLEAN" Bits="1"/>
+      <Param Order="2" Name="Stop" Text="Stop" Type="BOOLEAN" Bits="1"/>
+      <Param Order="3" Name="StopReq" Text="Stop Req" Type="BOOLEAN" Bits="1"/>
+      <Param Order="4" Name="Reserved1" Text="Reserved" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="3" Name="SessionTxRandomInterval" Text="Session Tx Random Interval" Type="HEX" Bits="8"/>
+    <Param Order="4" Name="Properties5" Text="Properties5" Type="HEX" Bits="8">
+      <Param Order="0" Name="RepeaterCount" Text="Repeater Count" Type="HEX" Bits="4"/>
+      <Param Order="1" Name="SessionTTL" Text="Session TTL" Type="HEX" Bits="4"/>
+    </Param>
+    <Param Order="5" Name="Repeater0" Text="Repeater 0" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="6" Name="Repeater1" Text="Repeater 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="7" Name="Repeater2" Text="Repeater 2" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="8" Name="Repeater3" Text="Repeater 3" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="9" Name="NetworkHomeID" Text="Network Home ID" Type="HEX" Bits="32"/>
+    <Validation ParamName="Properties1.HeaderType" ParamHexValue="0x05"/>
+    <Validation ParamName="Properties3.ExploreCommandType" ParamHexValue="0x01"/>
+    <Destination>
+      <Destination Ref="DestinationNodeID"/>
+    </Destination>
+  </Header>
+  <Header Key="60" Name="WAKE_UP_BEAM" Text="WakeUp Beam" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="WakeUpBeamMarker" Text="Wake Up Beam Marker" Type="HEX" Bits="8"/>
+    <Param Order="1" Name="DestinationNodeID" Text="Destination Node ID 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="2" Name="HomeIDHash" Text="Home ID Hash" Type="HEX" Bits="8"/>
+    <Validation ParamName="WakeUpBeamMarker" ParamHexValue="0x55"/>
+  </Header>
+  <Header Key="61" Name="WAKE_UP_BEAM_START" Text="WakeUp Beam Start" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="WakeUpBeamMarker" Text="Wake Up Beam Marker" Type="HEX" Bits="8"/>
+    <Param Order="1" Name="DestinationNodeID" Text="Destination Node ID 1" Type="NODE_NUMBER" Bits="8"/>
+    <Param Order="2" Name="HomeIDHashIncluded" Text="Home ID Hash Included" Type="BOOLEAN" Bits="8"/>
+    <Param Order="3" Name="HomeIDHash" Text="Home ID Hash" Type="HEX" Bits="8"/>
+    <Validation ParamName="WakeUpBeamMarker" ParamHexValue="0x55"/>
+  </Header>
+  <Header Key="62" Name="WAKE_UP_BEAM_STOP" Text="WakeUp Beam Stop" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+    <Param Order="0" Name="Counter" Text="Counter" Type="NUMBER" Bits="16"/>
+  </Header>
+  <Header Key="63" Name="WAKE_UP_BEAM_LR" Text="WakeUp Beam" IsAck="false" IsError="false" IsMulticast="false" IsRouted="false">
+	<Param Order="0" Name="WakeUpBeamMarker" Text="Wake Up Beam Marker" Type="HEX" Bits="8"/>
+	<Param Order="1" Name="Properties1" Text="Properties1" Type="HEX" Bits="16">
+		<Param Order="0" Name="DestinationNodeID" Text="Destination Node ID" Type="NUMBER" Bits="12"/>
+		<Param Order="1" Name="TxPower" Text="TX Power" Type="HEX" Bits="4"/>
+	</Param>
+	<Param Order="2" Name="HomeIDHash" Text="Home ID Hash" Type="HEX" Bits="8"/>
+  <Validation ParamName="WakeUpBeamMarker" ParamHexValue="0x55"/>
+  </Header>
+  <DefineSet Name="HeaderType">
+    <Define Key="0x01" Name="Singlecast" Text="Singlecast Frame"/>
+    <Define Key="0x02" Name="Multicast" Text="Multicast Frame"/>
+    <Define Key="0x03" Name="TransferAcknowledge" Text="Transfer Acknowledge"/>
+    <Define Key="0x04" Name="Flooded" Text="Flooded Frame"/>
+    <Define Key="0x05" Name="Explorer" Text="Explorer Frame"/>
+    <Define Key="0x08" Name="Routed" Text="Routed Frame"/>
+  </DefineSet>
+  <DefineSet Name="ExploreCommandType">
+    <Define Key="0x00" Name="ExploreNormal" Text="Explore Normal"/>
+    <Define Key="0x01" Name="ExploreAutoinclusion" Text="Explore Autoinclusion"/>
+    <Define Key="0x02" Name="ExploreSearchResult" Text="Explore Search Result"/>
+  </DefineSet>
+  <HeaderFilter Order="1" Text="Broadcast">
+    <HeaderCodes>
+      <HeaderCode>10</HeaderCode>
+      <HeaderCode>11</HeaderCode>
+      <HeaderCode>12</HeaderCode>
+      <HeaderCode>72</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="2" Text="Singlecast">
+    <HeaderCodes>
+      <HeaderCode>13</HeaderCode>
+      <HeaderCode>14</HeaderCode>
+      <HeaderCode>15</HeaderCode>
+	    <HeaderCode>70</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="3" Text="Multicast">
+    <HeaderCodes>
+      <HeaderCode>16</HeaderCode>
+      <HeaderCode>17</HeaderCode>
+      <HeaderCode>18</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="4" Text="Ack">
+    <HeaderCodes>
+      <HeaderCode>19</HeaderCode>
+      <HeaderCode>20</HeaderCode>
+      <HeaderCode>21</HeaderCode>
+      <HeaderCode>71</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="5" Text="Routed Singlecast">
+    <HeaderCodes>
+      <HeaderCode>22</HeaderCode>
+      <HeaderCode>23</HeaderCode>
+      <HeaderCode>24</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="6" Text="Routed Ack">
+    <HeaderCodes>
+      <HeaderCode>25</HeaderCode>
+      <HeaderCode>26</HeaderCode>
+      <HeaderCode>27</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="7" Text="Routed Error">
+    <HeaderCodes>
+      <HeaderCode>28</HeaderCode>
+      <HeaderCode>29</HeaderCode>
+      <HeaderCode>30</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="9" Text="Explorer">
+    <HeaderCodes>
+      <HeaderCode>33</HeaderCode>
+      <HeaderCode>34</HeaderCode>
+      <HeaderCode>35</HeaderCode>
+      <HeaderCode>36</HeaderCode>
+      <HeaderCode>37</HeaderCode>
+      <HeaderCode>38</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="10" Text="Checksum Error">
+    <HeaderCodes>
+      <HeaderCode>50</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="11" Text="WakeUp Beam">
+    <HeaderCodes>
+      <HeaderCode>60</HeaderCode>
+      <HeaderCode>61</HeaderCode>
+      <HeaderCode>62</HeaderCode>
+      <HeaderCode>63</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="12" Text="Unknown Header">
+    <HeaderCodes>
+      <HeaderCode>99</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="13" Text="Other">
+    <HeaderCodes>
+      <HeaderCode>100</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+  <HeaderFilter Order="14" Text="Other Errors">
+    <HeaderCodes>
+      <HeaderCode>101</HeaderCode>
+      <HeaderCode>102</HeaderCode>
+    </HeaderCodes>
+  </HeaderFilter>
+</FrameDefinition>
