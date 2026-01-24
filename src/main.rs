@@ -88,7 +88,7 @@ enum Commands {
         port: String,
 
         /// Z-Wave region
-        #[arg(long, value_enum)]
+        #[arg(long, value_enum, required = true)]
         region: Region,
     },
 
