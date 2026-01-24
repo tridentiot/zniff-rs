@@ -32,8 +32,8 @@ use tokio::{
 };
 
 #[derive(Parser)]
-#[command(name = "toolbox")]
-#[command(about = "A CLI tool with multiple subcommands", long_about = None)]
+#[command(name = "zniff-rs")]
+#[command(about = "zniff-rs is a tool for sniffing, parsing and converting Z-Wave data.", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -71,7 +71,7 @@ enum Commands {
         format: String,
     },
 
-    /// Runs the main application logic
+    /// Runs a PTI server that listens for Zniffer frames and serves them over TCP.
     Run {
         /// Configuration file
         #[arg(short, long)]
