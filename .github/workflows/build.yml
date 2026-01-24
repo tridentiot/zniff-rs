@@ -28,6 +28,23 @@ jobs:
           name: zniff-rs-ubuntu
           path: ./target/release/zniff-rs
 
+  build-ubuntu-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install libudev
+        run: |
+          sudo apt update
+          sudo apt install -y libudev-dev
+
+      - run: cargo build --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zniff-rs-ubuntu-arm
+          path: ./target/release/zniff-rs
+
   build-windows:
     runs-on: windows-latest
     steps:
