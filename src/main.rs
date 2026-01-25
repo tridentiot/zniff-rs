@@ -1,10 +1,22 @@
 mod frame_definition;
 mod xml;
+use core::error;
 use std::time::Duration;
 use std::io::{self, Write, Read};
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{
+    Parser,
+    Subcommand,
+    ValueEnum,
+    value_parser,
+};
 use serialport::SerialPort;
+
+mod proxy;
+use crate::proxy::{
+    ProxyProtocol,
+    Proxy
+};
 
 use crate::types::Frame;
 mod zw_parser;
@@ -21,7 +33,6 @@ use crate::generator::FrameGenerator;
 
 use tokio::{
     io::{
-        AsyncWriteExt,
         AsyncReadExt,
     },
     net::{
@@ -30,6 +41,12 @@ use tokio::{
     },
     sync::broadcast
 };
+
+mod client_handler;
+use crate::client_handler::handle_client;
+
+mod zn_client;
+use crate::zn_client::ZnClient;
 
 #[derive(Parser)]
 #[command(name = "zniff-rs")]
@@ -51,9 +68,15 @@ enum Commands {
         delay: u16,
     },
 
-    /// Connect to a generator, server or proxy.
+    /// Connect to a device, generator, server or proxy.
     Client {
+        /// Address to connect to
+        #[arg(long)]
+        address: Vec<String>,
 
+        /// Serial port to connect to
+        #[arg(short = 's', long = "serial")]
+        serial: Vec<String>,
     },
 
     /// Converts a file from one format to another
@@ -82,8 +105,8 @@ enum Commands {
         debug: bool,
 
         /// Serial port
-        #[arg(long)]
-        port: String,
+        #[arg(short = 's', long = "serial")]
+        serial: Vec<String>,
 
         /// Z-Wave region
         #[arg(long, value_enum, required = true)]
@@ -95,6 +118,19 @@ enum Commands {
         /// String representing the Z-Wave frame
         #[arg(long)]
         input: String,
+    },
+
+    /// Runs a Zniffer TCP to PTI or Zniffer TCP proxy.
+    Proxy {
+        /// Protocol to use by the client connecting to the proxy (PTI or zniff-rs)
+        /// The PTI protocol can be used by the PC Zniffer application.
+        /// The zniff-rs protocol can be used by other zniff-rs instances.
+        #[arg(long, value_parser = value_parser!(ProxyProtocol))]
+        protocol: ProxyProtocol,
+
+        /// Address to bind to
+        #[arg(long)]
+        address: String,
     },
 }
 
@@ -264,83 +300,23 @@ fn print_hex(vec: &Vec<u8>) {
     println!(); // newline at the end
 }
 
-async fn handle_client(
-    mut stream: TcpStream,
-    rx: &mut broadcast::Receiver<Frame>,
-) {
-    loop {
-        tokio::select! {
-            result = rx.recv() => {
-                match result {
-                    Ok(mut frame) => {
-                        match frame.to_pti_vector()
-                        {
-                            Ok(pty_frame) =>  {
-
-                                let _hex_string: String = pty_frame.iter()
-                                        .map(|byte| format!("{:02X}", byte))
-                                        .collect::<Vec<String>>()
-                                        .join(" ");
-
-                                //println!("tx pti:{:?}", hex_string);
-                                if let Err(e) = stream.write_all(&pty_frame).await {
-                                    eprintln!("Client write failed: {e}");
-                                    return;
-                                }
-                            }
-                            Err(_e) => {
-                                println!("Failed to form PTI packet");
-                            }
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                        eprintln!("Client lagged: skipped {n} messages");
-                    }
-                    Err(_) => {
-                        eprintln!("Some receive error happened.");
-                    }
-                }
-            }
-
-
-            // Detect client disconnect by trying to read
-            result = stream.readable() => {
-                if result.is_err() {
-                    // Client dropped connection
-                    eprintln!("Client disconnected");
-                    return;
-                }
-
-                // Attempt a read of 0 bytes to check for EOF
-                let mut buf = [0u8; 1];
-                match stream.try_read(&mut buf) {
-                    Ok(0) => {
-                        // EOF => client disconnected
-                        eprintln!("Client disconnected (EOF)");
-                        return;
-                    }
-                    Ok(msg) => {
-                        // The client sent some data, but we don't care.
-                        println!("Client sent {} bytes, ignoring", msg);
-                    }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        // No real data; ignore
-                    }
-                    Err(e) => {
-                        eprintln!("Read error: {e}");
-                        return;
-                    }
-                }
-            }
-        }
-    }
-}
-
-async fn run(port_name: String, region: &Region) {
+async fn run(serial_ports: &Vec<String>, region: &Region) {
     let baud_rate = 230_400;
 
-    println!("Connecting to {}", port_name);
-    let port = serialport::new(port_name, baud_rate)
+    if serial_ports.is_empty() {
+        eprintln!("No serial ports provided. Use --serial to specify at least one port.");
+        return;
+    }
+
+    if serial_ports.len() > 1 {
+        println!("Multiple serial ports provided:");
+        for (i, port) in serial_ports.iter().enumerate() {
+            println!("Serial[{}]: {}", i, port);
+        }
+    }
+
+    println!("Connecting to the first one: {}", serial_ports[0]);
+    let port: Box<dyn SerialPort> = serialport::new(&serial_ports[0], baud_rate)
         .timeout(Duration::from_millis(500))
         .open()
         .expect("Failed to open port");
@@ -371,10 +347,12 @@ async fn run(port_name: String, region: &Region) {
     let (tx, _rx) = broadcast::channel(16);
 
     let tx_clone = tx.clone();
-    tokio::spawn(async move {
+    // Spawn a blocking task to read frames since the serial port read is blocking (not async).
+    tokio::task::spawn_blocking(move || {
         loop {
             match zniffer.get_frames() {
                 Ok(frame) => {
+                    println!("Received frame: {:?}", frame);
                     match tx_clone.send(frame) {
                         Ok(_) => {
                             // Successfully sent
@@ -424,10 +402,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         },
-        Commands::Client {  } => {
+        Commands::Client { address, serial } => {
+            if address.is_empty() && serial.is_empty() {
+                eprintln!("No address or serial ports provided. Use --address or --serial to specify at least one.");
 
-            let addr = "127.0.0.1:9000";
-            let mut stream = TcpStream::connect(addr).await.unwrap();
+                // Return an error so the exit code becomes non-zero
+                return Err("No address or serial ports provided".into());
+            }
+
+            let client = match ZnClient::try_new(&serial, &address) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Failed to create ZnClient: {:?}", e);
+                    return Err("Failed to create ZnClient".into());
+                }
+            };
+
+            client.run().await?;
+/*
+            let addr = format!("{}:9000", address[0]);
+            let mut stream = TcpStream::connect(&addr).await.unwrap();
             println!("Connected to {addr}");
 
             let mut buf = [0u8; 8192];
@@ -448,7 +442,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 println!();
             }
-
+ */
             Ok(())
         },
         Commands::Convert { input, output, format } => {
@@ -456,12 +450,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Add conversion logic here
             Ok(())
         }
-        Commands::Run { config, debug , port, region} => {
+        Commands::Run { config, debug , serial, region} => {
             println!("Running with config: {:?}", config);
             println!("Debug mode: {}", debug);
             // Add run logic here
             println!("Region: {:?}", region);
-            run(port.to_string(), region).await;
+            run(serial, region).await;
             Ok(())
         },
         Commands::Parse { input } => {
@@ -469,6 +463,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let zwc = xml::parse_xml();
             let zw_parser: ZwParser = ZwParser::new(&fd, &zwc);
             zw_parser.parse_str(&input);
+            Ok(())
+        },
+        Commands::Proxy { protocol, address } => {
+            let proxy = Proxy::new(address.to_string(), protocol.clone());
+            proxy.run().await?;
             Ok(())
         }
     }
