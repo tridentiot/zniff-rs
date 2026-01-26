@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+// SPDX-License-Identifier: MIT
 use std::io::{Seek, Write};
 use crate::zlf::types::ZLF_VERSION;
 use crate::zlf::reader::ZlfError;
