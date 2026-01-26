@@ -26,6 +26,8 @@ mod types;
 mod zniffer_parser;
 
 mod generator;
+mod frame;
+
 use crate::generator::FrameGenerator;
 
 use tokio::{
