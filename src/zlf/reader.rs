@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+// SPDX-License-Identifier: MIT
 use std::io::{self, Read, Seek, SeekFrom};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

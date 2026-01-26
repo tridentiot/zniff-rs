@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+// SPDX-License-Identifier: MIT
 use crate::frame_definition::{FrameDefinition};
 use crate::xml::{
     ZwClasses,

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+// SPDX-License-Identifier: MIT
 use crate::types::Frame;
 
 const SOF_COMMAND: u8 = 0x23;
