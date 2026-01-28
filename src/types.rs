@@ -98,6 +98,9 @@ pub enum PtiRegion {
     CN = 11,
     USLR = 12,
     #[allow(dead_code)]
+    // `USLRBACK` is a legacy/back-channel PTI region code that appears in PTI traces
+    // but is not a user-selectable Z-Wave region in this crate. It is intentionally
+    // not represented in `Region` and therefore cannot be produced by `From<Region>`.
     USLRBACK = 13,
     EULR = 15,
     JP = 7,
