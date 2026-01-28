@@ -5,10 +5,17 @@ mod xml;
 use std::time::Duration;
 use std::io::{self, Write, Read};
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{
+    Parser,
+    Subcommand,
+    value_parser,
+};
 use serialport::SerialPort;
 
-use crate::types::Frame;
+use crate::types::{
+    Frame,
+    Region,
+};
 mod zw_parser;
 use zw_parser::ZwParser;
 mod zlf;
@@ -74,21 +81,13 @@ enum Commands {
     },
 
     /// Runs a PTI server that listens for Zniffer frames and serves them over TCP.
-    Run {
-        /// Configuration file
-        #[arg(short, long)]
-        config: Option<String>,
-
-        /// Enable debug mode
+    Server {
+        /// Serial port e.g., COM3 or /dev/ttyUSB0
         #[arg(long)]
-        debug: bool,
+        serial: String,
 
-        /// Serial port
-        #[arg(long)]
-        port: String,
-
-        /// Z-Wave region
-        #[arg(long, value_enum, required = true)]
+        /// Z-Wave region e.g., US, EU, etc.
+        #[arg(long, value_parser = value_parser!(Region), required = true)]
         region: Region,
     },
 
@@ -98,22 +97,6 @@ enum Commands {
         #[arg(long)]
         input: String,
     },
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-enum Region {
-    EU = 0,
-    US = 1,
-    ANZ = 2,
-    HK = 3,
-    IN = 5,
-    IL = 6,
-    RU = 7,
-    CN = 8,
-    USLR = 9,
-    EULR = 11,
-    JP = 32,
-    KR = 33,
 }
 
 struct Zniffer {
@@ -463,12 +446,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Add conversion logic here
             Ok(())
         }
-        Commands::Run { config, debug , port, region} => {
-            println!("Running with config: {:?}", config);
-            println!("Debug mode: {}", debug);
-            // Add run logic here
+        Commands::Server { serial, region} => {
             println!("Region: {:?}", region);
-            run(port.to_string(), region).await;
+            run(serial.to_string(), region).await;
             Ok(())
         },
         Commands::Parse { input } => {

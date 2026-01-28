@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
-use crate::types::Frame;
+use crate::types::{
+  Frame,
+  Region,
+};
 
 const SOF_COMMAND: u8 = 0x23;
 const SOF_FRAME: u8 = 0x21;
@@ -115,8 +118,16 @@ impl Parser {
           self.state = ParserState::AwaitRegion;
         },
         ParserState::AwaitRegion => {
-          self.frame.region = value;
-          self.state = ParserState::AwaitRssi;
+          self.frame.region = match Region::try_from(value) {
+            Ok(region) => {
+              self.state = ParserState::AwaitRssi;
+              region
+            },
+            Err(_) => {
+              self.reset();
+              continue;
+            },
+          };
         },
         ParserState::AwaitRssi => {
           self.frame.rssi = value;
@@ -203,7 +214,7 @@ mod tests {
       ]);
       assert_eq!(result, ParserResult::ValidFrame {
         frame: Frame {
-          region: 0x00,
+          region: Region::EU,
           channel: 0x01,
           speed: 0x00,
           timestamp: 0x6DCE,
@@ -239,7 +250,7 @@ mod tests {
       ]);
       assert_eq!(result, ParserResult::ValidFrame {
         frame: Frame {
-          region: 0x00,
+          region: Region::EU,
           channel: 0x00,
           speed: 0x02,
           timestamp: 0x449E,
