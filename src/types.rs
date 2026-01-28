@@ -87,6 +87,12 @@ impl fmt::Display for ParseRegionError {
 impl std::error::Error for ParseRegionError {}
 
 #[repr(u8)]
+/// Region identifiers as encoded in PTI (protocol trace / capture) data.
+///
+/// This enum represents the region values used by the PTI tooling / capture
+/// format, which differ from the Z-Wave `Region` enum discriminants above.
+/// When converting between `Region` and `PtiRegion`, an explicit mapping is
+/// required rather than relying on the underlying numeric values.
 pub enum PtiRegion {
     EU = 1,
     US = 2,
