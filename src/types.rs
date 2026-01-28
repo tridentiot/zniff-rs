@@ -112,6 +112,9 @@ pub enum PtiRegion {
     JP = 7,
     KR = 10,
     #[allow(dead_code)]
+    // This PTI region value is only used by the PTI protocol for end devices and
+    // has no corresponding variant in the public `Region` enum, so it cannot be
+    // produced by the `From<Region>` conversion and remains intentionally unused.
     USLRENDDEVICE = 14,
 }
 
