@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 mod frame_definition;
 mod xml;
+mod xml_output;
 use std::time::Duration;
 use std::io::{self, Write, Read};
 
@@ -92,11 +93,15 @@ enum Commands {
         region: Region,
     },
 
-    /// Parses a Z-Wave frame from a string input.
+    /// Parses a Z-Wave frame from a string input or ZLF file.
     Parse {
-        /// String representing the Z-Wave frame
+        /// String representing the Z-Wave frame (hex string) or path to ZLF file
         #[arg(long)]
         input: String,
+
+        /// Output XML file path (optional)
+        #[arg(short, long)]
+        output: Option<String>,
     },
 }
 
@@ -471,11 +476,120 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run(port.to_string(), region).await;
             Ok(())
         },
-        Commands::Parse { input } => {
+        Commands::Parse { input, output } => {
+            use std::path::Path;
+            use crate::xml_output::XmlWriter;
+
             let fd = frame_definition::parse_xml();
             let zwc = xml::parse_xml();
             let zw_parser: ZwParser = ZwParser::new(&fd, &zwc);
-            zw_parser.parse_str(&input);
+
+            // Check if input is a ZLF file or hex string
+            let path = Path::new(&input);
+            if path.exists() && input.ends_with(".zlf") {
+                // Parse ZLF file
+                use std::fs::File;
+                use zlf::ZlfReader;
+
+                let file = File::open(&input)?;
+                let mut reader = match ZlfReader::new(file) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("Failed to open ZLF file: {:?}", e);
+                        return Err(Box::new(e) as Box<dyn std::error::Error>);
+                    }
+                };
+
+                let mut xml_writer = XmlWriter::new();
+
+                // Read and parse frames from ZLF file
+                loop {
+                    match reader.next() {
+                        Ok(Some(record)) => {
+                            match record {
+                                zlf::ZlfRecord::Other(raw_frame) => {
+                                    // Parse the payload
+                                    if !raw_frame.payload.is_empty() {
+                                        let parsed = zw_parser.parse_bytes(raw_frame.payload.clone());
+                                        xml_writer.add_frame(parsed);
+                                    }
+                                },
+                                zlf::ZlfRecord::Data(data_frame) => {
+                                    // Parse the MPDU
+                                    if !data_frame.mpdu.is_empty() {
+                                        let mut parsed = zw_parser.parse_bytes(data_frame.mpdu.clone());
+                                        // Add ZLF-specific fields
+                                        parsed.add_field(
+                                            "ZLF_Timestamp".to_string(),
+                                            data_frame.timestamp.to_string(),
+                                            Some("u16".to_string())
+                                        );
+                                        parsed.add_field(
+                                            "ZLF_RSSI".to_string(),
+                                            data_frame.rssi.to_string(),
+                                            Some("i8".to_string())
+                                        );
+                                        parsed.add_field(
+                                            "ZLF_Region".to_string(),
+                                            format!("0x{:02X}", data_frame.region),
+                                            Some("u8".to_string())
+                                        );
+                                        xml_writer.add_frame(parsed);
+                                    }
+                                },
+                            }
+                        },
+                        Ok(None) => {
+                            // End of file
+                            break;
+                        },
+                        Err(e) => {
+                            eprintln!("Error reading frame: {:?}", e);
+                            break;
+                        }
+                    }
+                }
+
+                // Write to XML file or stdout
+                match output {
+                    Some(output_path) => {
+                        println!("Writing parsed frames to XML file: {}", output_path);
+                        match xml_writer.write_to_file(&output_path) {
+                            Ok(()) => println!("Successfully wrote XML to {}", output_path),
+                            Err(e) => eprintln!("Failed to write XML: {:?}", e),
+                        }
+                    },
+                    None => {
+                        eprintln!("No output file specified. Use --output to specify an XML output file.");
+                    }
+                }
+            } else {
+                // Parse hex string (original behavior)
+                if let Some(output_path) = output {
+                    // Parse to XML
+                    let frame: Vec<u8> = match hex::decode(&input) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            eprintln!("Failed to decode hex string: {:?}", e);
+                            return Ok(());
+                        }
+                    };
+                    
+                    let parsed = zw_parser.parse_bytes(frame);
+                    let mut xml_writer = XmlWriter::new();
+                    xml_writer.add_frame(parsed);
+                    
+                    println!("Writing parsed frame to XML file: {}", output_path);
+                    match xml_writer.write_to_file(output_path) {
+                        Ok(()) => println!("Successfully wrote XML to {}", output_path),
+                        Err(e) => eprintln!("Failed to write XML: {:?}", e),
+                    }
+                } else {
+                    // Print to console (original behavior)
+                    zw_parser.parse_str(&input);
+                }
+            }
+            
             Ok(())
         }
     }
