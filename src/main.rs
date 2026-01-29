@@ -422,6 +422,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut buf = [0u8; 8192];
             let mut total = 0usize;
+            let mut total_frames = 0usize;
 
             loop {
                 let n: usize = stream.read(&mut buf).await.unwrap();
@@ -430,6 +431,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
                 total += n;
+                total_frames += 1;
                 // Print as hex (first 32 bytes for brevity)
                 let preview = &buf[..n];
                     print!("recv {n} bytes: ");
@@ -438,6 +440,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 println!();
             }
+
+            println!("Total frames received: {total_frames}");
 
             Ok(())
         },
