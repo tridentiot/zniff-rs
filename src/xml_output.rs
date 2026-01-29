@@ -1,8 +1,14 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
 
+//! XML output module for serializing parsed Z-Wave frames to XML format.
+//!
+//! This module provides structures and functions to convert parsed Z-Wave frames
+//! into a well-structured XML format suitable for analysis and processing.
+
 use std::io::Write;
 
+/// Represents a single parsed field from a Z-Wave frame.
 #[derive(Debug, Clone)]
 pub struct ParsedField {
     pub name: String,
@@ -10,18 +16,19 @@ pub struct ParsedField {
     pub field_type: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+/// Represents a complete parsed Z-Wave frame with all its fields.
+#[derive(Debug, Clone, Default)]
 pub struct ParsedFrame {
     pub fields: Vec<ParsedField>,
 }
 
 impl ParsedFrame {
+    /// Creates a new empty ParsedFrame.
     pub fn new() -> Self {
-        ParsedFrame {
-            fields: Vec::new(),
-        }
+        Self::default()
     }
 
+    /// Adds a field to the frame with the given name, value, and optional type.
     pub fn add_field(&mut self, name: String, value: String, field_type: Option<String>) {
         self.fields.push(ParsedField {
             name,
@@ -31,21 +38,32 @@ impl ParsedFrame {
     }
 }
 
+/// XML writer for converting parsed frames to XML format.
+#[derive(Default)]
 pub struct XmlWriter {
     frames: Vec<ParsedFrame>,
 }
 
 impl XmlWriter {
+    /// Creates a new empty XmlWriter.
     pub fn new() -> Self {
-        XmlWriter {
-            frames: Vec::new(),
-        }
+        Self::default()
     }
 
+    /// Adds a parsed frame to be written to the XML output.
     pub fn add_frame(&mut self, frame: ParsedFrame) {
         self.frames.push(frame);
     }
 
+    /// Writes all frames to an XML file at the specified path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The file path where the XML should be written
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or an `std::io::Error` if writing fails.
     pub fn write_to_file(&self, path: &str) -> Result<(), std::io::Error> {
         let mut file = std::fs::File::create(path)?;
         

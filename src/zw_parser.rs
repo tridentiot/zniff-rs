@@ -84,7 +84,7 @@ impl<'a> ZwParser<'a> {
                         let mut bit_offset = 0;
                         for sub_param in sub_params {
                             let n: usize = sub_param.bits.parse::<usize>().unwrap();
-                            let sub_value = &value[0] >> bit_offset & ((1 << n) - 1);
+                            let sub_value = (value[0] >> bit_offset) & ((1 << n) - 1);
                             println!("{} ({:?}): {:02X}", sub_param.name, sub_param.bits, sub_value);
                             bit_offset += n;
 
@@ -194,7 +194,7 @@ impl<'a> ZwParser<'a> {
     }
 
     /// Parse from bytes, returning a ParsedFrame structure suitable for XML output.
-    pub fn parse_bytes(&self, frame: Vec<u8>) -> ParsedFrame {
+    pub fn parse_bytes(&self, frame: &[u8]) -> ParsedFrame {
         let mut parsed_frame = ParsedFrame::new();
 
         // Add raw frame data
@@ -289,8 +289,8 @@ impl<'a> ZwParser<'a> {
 
             let header_type_name = get_header_type_name(&self.fd, header_type);
             parsed_frame.add_field(
-                "HeaderType".to_string(),
-                header_type_name.clone(),
+                "HeaderTypeName".to_string(),
+                header_type_name.to_uppercase(),
                 Some("string".to_string())
             );
 

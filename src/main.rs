@@ -510,27 +510,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 zlf::ZlfRecord::Other(raw_frame) => {
                                     // Parse the payload
                                     if !raw_frame.payload.is_empty() {
-                                        let parsed = zw_parser.parse_bytes(raw_frame.payload.clone());
+                                        let parsed = zw_parser.parse_bytes(&raw_frame.payload);
                                         xml_writer.add_frame(parsed);
                                     }
                                 },
                                 zlf::ZlfRecord::Data(data_frame) => {
                                     // Parse the MPDU
                                     if !data_frame.mpdu.is_empty() {
-                                        let mut parsed = zw_parser.parse_bytes(data_frame.mpdu.clone());
+                                        let mut parsed = zw_parser.parse_bytes(&data_frame.mpdu);
                                         // Add ZLF-specific fields
                                         parsed.add_field(
-                                            "ZLF_Timestamp".to_string(),
+                                            "ZlfTimestamp".to_string(),
                                             data_frame.timestamp.to_string(),
                                             Some("u16".to_string())
                                         );
                                         parsed.add_field(
-                                            "ZLF_RSSI".to_string(),
+                                            "ZlfRssi".to_string(),
                                             data_frame.rssi.to_string(),
                                             Some("i8".to_string())
                                         );
                                         parsed.add_field(
-                                            "ZLF_Region".to_string(),
+                                            "ZlfRegion".to_string(),
                                             format!("0x{:02X}", data_frame.region),
                                             Some("u8".to_string())
                                         );
@@ -575,7 +575,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     };
                     
-                    let parsed = zw_parser.parse_bytes(frame);
+                    let parsed = zw_parser.parse_bytes(&frame);
                     let mut xml_writer = XmlWriter::new();
                     xml_writer.add_frame(parsed);
                     
