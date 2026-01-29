@@ -8,4 +8,4 @@ pub use reader::{
     ZlfReader,
 };
 
-mod writer;
+//mod writer; // not yet implemented

@@ -1,7 +1,14 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
-use std::io::{self, Read, Seek, SeekFrom};
-use serde::{Deserialize, Serialize};
+use std::io::{
+    self,
+    Read,
+    Seek,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use thiserror::Error;
 use crate::zlf::types::{
     ApiType,
@@ -12,19 +19,34 @@ use crate::zlf::types::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum FrameType {
-    Cmd = 0x00,       // CMD_FRAME
+    Command = 0x00,   // CMD_FRAME
     Data = 0x01,      // DATA_FRAME
     Beam = 0x02,      // BEAM_FRAME
     BeamStart = 0x04, // BEAM_START
     BeamStop = 0x05,  // BEAM_STOP
-    Unknown(u8),
+}
+
+impl TryFrom<u8> for FrameType {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(FrameType::Command),
+            0x01 => Ok(FrameType::Data),
+            0x02 => Ok(FrameType::Beam),
+            0x04 => Ok(FrameType::BeamStart),
+            0x05 => Ok(FrameType::BeamStop),
+            _ => Err(()),
+        }
+    }
 }
 
 /// Raw frame as read from ZLF after header.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RawFrame {
+    pub timestamp: u64, // file timestamp
     pub sof: u8,         // SOF '#' or SODF '!'
-    pub typ: FrameType,  // parsed type
+    pub frame_type: FrameType,  // parsed type
     pub payload: Vec<u8> // raw payload bytes
 }
 
@@ -49,7 +71,7 @@ pub enum ZlfRecord {
 #[derive(Error, Debug)]
 pub enum ZlfError {
     #[error("Invalid ZLF version: {0}")]
-    InvalidZlfVersion(u8),
+    InvalidZlfVersion(u32),
     #[error("Invalid start pattern")]
     InvalidStartPattern,
     #[error("Invalid properties field: {0}")]
@@ -70,51 +92,49 @@ pub struct ZlfReader<R: Read + Seek> {
     r: R,
     // If you discover version markers in the 2048-byte header, store them here
     // to adjust parsing per version.
+    frame_counter: usize,
 }
 
 impl<R: Read + Seek> ZlfReader<R> {
-    /// Construct reader and skip the static 2048-byte header.
     pub fn new(mut r: R) -> Result<Self, ZlfError> {
-        // Community reverse engineering confirms a 2048-byte header. [1](https://github.com/knutkj/battery-service/blob/main/README.md)
+        // Read the 2048-byte header into a buffer.
+        let mut header: [u8; 2048] = [0u8; 2048];
+        r.read_exact(&mut header)?;
 
-        // Check for ZLF version at index 0.
-        // TODO: Is 32 bit.
-        let mut zlf_version = [0u8; 1];
-        r.read_exact(&mut zlf_version)?;
-        if zlf_version[0] != ZLF_VERSION {
-            return Err(ZlfError::InvalidZlfVersion(zlf_version[0]));
-        }
-
-        // TODO: Read 4 bytes / 32 bit of text encoding at index 4.
-        let mut encoding = [0u8; 4];
-        r.read_exact(&mut encoding)?;
-
-        // TODO: Read comment at index 8. 512 bytes.
-
-        // Jump to start pattern
-        r.seek(SeekFrom::Current(2041))?;
-
-        // Check for 0x2312 pattern.
-        // TODO: This is a CRC value of the file header.
-        let mut pattern = [0u8; 2];
-        r.read_exact(&mut pattern)?;
-        //println!("Start pattern: {:?}", pattern);
-        if pattern[0] != 0x23 || pattern[1] != 0x12 {
+        // Check header checksum
+        let file_checksum = u16::from_le_bytes([header[2046], header[2047]]);
+        use crc16::*;
+        if State::<AUG_CCITT>::calculate(&header[..2046]) != file_checksum {
             return Err(ZlfError::InvalidStartPattern);
         }
 
-        Ok(Self { r })
+        // Check for ZLF version at index 0.
+        let version: u32 = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
+        if version != ZLF_VERSION {
+            return Err(ZlfError::InvalidZlfVersion(version));
+        }
+
+        // Read 4 bytes / 32 bit of text encoding at index 4.
+        let _encoding: u32 = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
+
+        // TODO: Read comment at index 8. 512 bytes.
+
+        Ok(Self { r, frame_counter: 0 })
+    }
+
+    pub fn frame_count(&self) -> usize {
+        self.frame_counter
     }
 
     /// Read the next frame. Returns Ok(None) at EOF.
     pub fn next(&mut self) -> Result<Option<ZlfRecord>, ZlfError> {
         // Read a timestamp of 8 bytes
         let mut timestamp = [0u8; 8];
-        let n = self.r.read(&mut timestamp)?;
-        if n == 0 {
-            return Ok(None); // EOF
+        match self.r.read_exact(&mut timestamp) {
+            Ok(()) => {},
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+            Err(e) => return Err(e.into()),
         }
-        println!("Timestamp: {:?}", u64::from_le_bytes(timestamp));
 
         let mut properties = [0u8; 1];
         self.r.read_exact(&mut properties)?;
@@ -149,79 +169,11 @@ impl<R: Read + Seek> ZlfReader<R> {
             _ => { },
         }
 
-        Ok(Some(ZlfRecord::Other(RawFrame { sof: 0, typ: FrameType::Unknown(0), payload })))
+        // TODO: Do we need the frame type?
+        let frame_type = FrameType::Data;
 
-/*
-        // Read marker (SOF or SODF). In the Zniffer runtime these are '#' and '!' respectively. [2](https://docs.silabs.com/z-wave/latest/zwave-api/zniffer)
-        let mut marker = [0u8; 1];
-        match self.r.read(&mut marker)? {
-            0 => return Ok(None), // EOF
-            1 => {},
-            _ => unreachable!(),
-        }
-        let sof = marker[0];
-        if sof != b'#' && sof != b'!' {
-            // If frames are concatenated, noisy bytes can appear. You might want to resync by scanning forward
-            // until you find '#'/ '!'. Here we fail fast.
-            return Err(ZlfError::BadMarker(sof));
-        }
+        self.frame_counter += 1;
 
-        // Read type
-        let mut typ_b = [0u8; 1];
-        if self.r.read(&mut typ_b)? != 1 {
-            return Err(ZlfError::Eof);
-        }
-        let typ = match typ_b[0] {
-            0x00 => FrameType::Cmd,
-            0x01 => FrameType::Data,
-            0x02 => FrameType::Beam,
-            0x04 => FrameType::BeamStart,
-            0x05 => FrameType::BeamStop,
-            other => FrameType::Unknown(other),
-        };
-
-        // Read payload length (uint8_t in device API). [3](https://tridentiot.github.io/tridentiot-sdk/z-wave/group__Zniffer.html)
-        let mut len_b = [0u8; 1];
-        if self.r.read(&mut len_b)? != 1 {
-            return Err(ZlfError::Eof);
-        }
-        let payload_len = len_b[0] as usize;
-
-        // Read payload bytes
-        let mut payload = vec![0u8; payload_len];
-        let mut read = 0usize;
-        while read < payload_len {
-            let n = self.r.read(&mut payload[read..])?;
-            if n == 0 {
-                return Err(ZlfError::Eof);
-            }
-            read += n;
-        }
-
-        // If it's a data frame, decode according to the Zniffer API layout. [3](https://tridentiot.github.io/tridentiot-sdk/z-wave/group__Zniffer.html)
-        if let FrameType::Data = typ {
-            if payload.len() < 6 {
-                return Err(ZlfError::ShortDataPayload);
-            }
-            let ts = u16::from_le_bytes([payload[0], payload[1]]);
-            let ch_speed = payload[2];
-            let region = payload[3];
-            let rssi = payload[4] as i8;
-            let mpdu_len = payload[5] as usize;
-            if 6 + mpdu_len > payload.len() {
-                return Err(ZlfError::ShortDataPayload);
-            }
-            let mpdu = payload[6..(6 + mpdu_len)].to_vec();
-            Ok(Some(ZlfRecord::Data(DataFrame {
-                timestamp: ts,
-                ch_and_speed: ch_speed,
-                region,
-                rssi,
-                mpdu,
-            })))
-        } else {
-            Ok(Some(ZlfRecord::Other(RawFrame { sof, typ, payload })))
-        }
-*/
+        Ok(Some(ZlfRecord::Other(RawFrame { timestamp: 0, sof: 0, frame_type, payload })))
     }
 }
