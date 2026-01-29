@@ -87,3 +87,64 @@ fn escape_xml(s: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parsed_frame_creation() {
+        let mut frame = ParsedFrame::new();
+        frame.add_field("TestField".to_string(), "TestValue".to_string(), Some("string".to_string()));
+        
+        assert_eq!(frame.fields.len(), 1);
+        assert_eq!(frame.fields[0].name, "TestField");
+        assert_eq!(frame.fields[0].value, "TestValue");
+        assert_eq!(frame.fields[0].field_type, Some("string".to_string()));
+    }
+
+    #[test]
+    fn test_xml_writer() {
+        let mut writer = XmlWriter::new();
+        let mut frame = ParsedFrame::new();
+        frame.add_field("Field1".to_string(), "Value1".to_string(), Some("type1".to_string()));
+        frame.add_field("Field2".to_string(), "Value2".to_string(), None);
+        
+        writer.add_frame(frame);
+        
+        assert_eq!(writer.frames.len(), 1);
+        assert_eq!(writer.frames[0].fields.len(), 2);
+    }
+
+    #[test]
+    fn test_xml_escaping() {
+        let input = "<tag>value & \"quoted\"</tag>";
+        let expected = "&lt;tag&gt;value &amp; &quot;quoted&quot;&lt;/tag&gt;";
+        assert_eq!(escape_xml(input), expected);
+    }
+
+    #[test]
+    fn test_xml_output_format() {
+        let mut writer = XmlWriter::new();
+        let mut frame = ParsedFrame::new();
+        frame.add_field("TestName".to_string(), "TestValue".to_string(), Some("TestType".to_string()));
+        
+        writer.add_frame(frame);
+        
+        // Write to a temporary file
+        let temp_path = "/tmp/test_xml_output.xml";
+        writer.write_to_file(temp_path).expect("Failed to write XML");
+        
+        // Read back and verify content
+        let content = std::fs::read_to_string(temp_path).expect("Failed to read XML");
+        assert!(content.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+        assert!(content.contains("<frames>"));
+        assert!(content.contains("<frame index=\"0\">"));
+        assert!(content.contains("<field name=\"TestName\" type=\"TestType\">TestValue</field>"));
+        assert!(content.contains("</frame>"));
+        assert!(content.contains("</frames>"));
+        
+        // Clean up
+        std::fs::remove_file(temp_path).ok();
+    }
+}
