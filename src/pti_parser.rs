@@ -6,9 +6,77 @@
 //! This module implements parsing for Silabs PTI format frames, which can contain
 //! Z-Wave packet data wrapped in DCH (Debug Channel) frames.
 //! 
-//! Reference implementations:
-//! - https://github.com/SiliconLabs/z-wave-ts-silabs/blob/main/z_wave_ts_silabs/parsers.py
-//! - https://github.com/Z-Wave-Alliance/z-wave-tools-core/blob/85e0d6ba2ec7f05c355b1f6e76d85ae8fea288c7/ZnifferApplication/Parsers/PtiFrameParser.cs
+//! ## Overview
+//! 
+//! PTI (Packet Trace Interface) is Silicon Labs' protocol for transmitting packet trace data.
+//! It wraps radio packets with metadata including RSSI, channel, region, and protocol information.
+//! 
+//! ## Frame Structure
+//! 
+//! ### DCH (Debug Channel) Frame
+//! 
+//! DCH frames encapsulate PTI data for transmission over TCP or other transports:
+//! 
+//! ```text
+//! DCH v2: [START][LEN(2)][VER(2)][TS(6)][TYPE(2)][SEQ(1)][PTI_PAYLOAD][END]
+//! DCH v3: [START][LEN(2)][VER(2)][TS(8)][TYPE(2)][FLAGS(4)][SEQ(2)][PTI_PAYLOAD][END]
+//! ```
+//! 
+//! ### PTI Frame
+//! 
+//! PTI frames contain the actual radio packet data:
+//! 
+//! ```text
+//! [HW_START][OTA_DATA...][HW_END][APPENDED_INFO]
+//! ```
+//! 
+//! Where APPENDED_INFO (parsed backward) is:
+//! ```text
+//! [RSSI (Rx only)][RADIO_CONFIG][RADIO_INFO][STATUS_0][APPENDED_INFO_CFG]
+//! ```
+//! 
+//! ## Usage
+//! 
+//! ### Parsing a complete DCH frame
+//! 
+//! ```rust
+//! # use zniff_rs::pti_parser::{parse_dch_frame, PtiParseResult};
+//! # fn example() {
+//! let dch_data: Vec<u8> = vec![/* ... */];
+//! match parse_dch_frame(&dch_data) {
+//!     PtiParseResult::ValidFrame { frame } => {
+//!         println!("Received Z-Wave frame: {:?}", frame);
+//!     },
+//!     PtiParseResult::IncompleteFrame => {
+//!         // Need more data
+//!     },
+//!     PtiParseResult::InvalidFrame => {
+//!         // Not a valid PTI frame
+//!     },
+//! }
+//! # }
+//! ```
+//! 
+//! ### Parsing PTI frame directly (without DCH wrapper)
+//! 
+//! ```rust
+//! # use zniff_rs::pti_parser::{parse_pti_frame, PtiParseResult};
+//! # fn example() {
+//! let pti_data: Vec<u8> = vec![/* ... */];
+//! match parse_pti_frame(&pti_data) {
+//!     PtiParseResult::ValidFrame { frame } => {
+//!         println!("Region: {:?}, Channel: {}, RSSI: {}", 
+//!                  frame.region, frame.channel, frame.rssi);
+//!     },
+//!     _ => {},
+//! }
+//! # }
+//! ```
+//! 
+//! ## Reference implementations
+//! 
+//! - [Python implementation](https://github.com/SiliconLabs/z-wave-ts-silabs/blob/main/z_wave_ts_silabs/parsers.py)
+//! - [C# implementation](https://github.com/Z-Wave-Alliance/z-wave-tools-core/blob/85e0d6ba2ec7f05c355b1f6e76d85ae8fea288c7/ZnifferApplication/Parsers/PtiFrameParser.cs)
 
 use crate::types::{Frame, Region};
 
@@ -261,6 +329,107 @@ fn parse_pti_frame(data: &[u8]) -> PtiParseResult {
     PtiParseResult::ValidFrame { frame }
 }
 
+/// Stateful PTI parser for handling streaming data
+/// 
+/// This parser maintains an internal buffer and can process data incrementally,
+/// making it suitable for TCP streams where DCH frames may arrive in chunks.
+pub struct PtiParser {
+    buffer: Vec<u8>,
+}
+
+impl PtiParser {
+    /// Create a new PTI parser
+    pub fn new() -> Self {
+        PtiParser {
+            buffer: Vec::new(),
+        }
+    }
+    
+    /// Parse incoming data, returning any complete frames found
+    /// 
+    /// This function appends new data to the internal buffer and attempts to parse
+    /// complete DCH frames. It returns all successfully parsed frames and removes
+    /// them from the buffer.
+    /// 
+    /// # Arguments
+    /// * `data` - New data to parse
+    /// 
+    /// # Returns
+    /// A vector of successfully parsed frames. The vector may be empty if no complete
+    /// frames were found in the data.
+    pub fn parse(&mut self, data: &[u8]) -> Vec<Frame> {
+        self.buffer.extend_from_slice(data);
+        
+        let mut frames = Vec::new();
+        let mut consumed = 0;
+        
+        // Try to parse frames from the buffer
+        while consumed < self.buffer.len() {
+            let remaining = &self.buffer[consumed..];
+            
+            // Need at least 6 bytes to determine if this is a valid DCH frame
+            if remaining.len() < 6 {
+                break;
+            }
+            
+            // Check for DCH start symbol
+            if remaining[0] != DCH_START_SYMBOL {
+                // Skip this byte and continue
+                consumed += 1;
+                continue;
+            }
+            
+            // Parse length to see if we have a complete frame
+            let length = u16::from_le_bytes([remaining[1], remaining[2]]) as usize;
+            let frame_size = length + 2; // +2 for start and end symbols
+            
+            if remaining.len() < frame_size {
+                // Not enough data for complete frame yet
+                break;
+            }
+            
+            // Try to parse this frame
+            match parse_dch_frame(&remaining[..frame_size]) {
+                PtiParseResult::ValidFrame { frame } => {
+                    frames.push(frame);
+                    consumed += frame_size;
+                },
+                PtiParseResult::IncompleteFrame => {
+                    // This shouldn't happen since we checked the length
+                    break;
+                },
+                PtiParseResult::InvalidFrame => {
+                    // Skip this start symbol and try again
+                    consumed += 1;
+                },
+            }
+        }
+        
+        // Remove consumed data from buffer
+        if consumed > 0 {
+            self.buffer.drain(..consumed);
+        }
+        
+        frames
+    }
+    
+    /// Reset the parser, clearing the internal buffer
+    pub fn reset(&mut self) {
+        self.buffer.clear();
+    }
+    
+    /// Get the current buffer size
+    pub fn buffer_len(&self) -> usize {
+        self.buffer.len()
+    }
+}
+
+impl Default for PtiParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -469,5 +638,122 @@ mod tests {
             PtiParseResult::InvalidFrame => {},
             _ => panic!("Expected InvalidFrame for bad end symbol"),
         }
+    }
+    
+    #[test]
+    fn test_streaming_parser_single_frame() {
+        let mut parser = PtiParser::new();
+        
+        let dch_data = vec![
+            0x5B, 0x19, 0x00, 0x02, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00,
+            0xF8, 0x01, 0x02, 0x03, 0x04, 0x05,
+            0xF9, 0x9D, 0x01, 0x01, 0x06, 0x52,
+            0x5D,
+        ];
+        
+        let frames = parser.parse(&dch_data);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].region, Region::EU);
+        assert_eq!(frames[0].payload, vec![0x01, 0x02, 0x03, 0x04, 0x05]);
+        assert_eq!(parser.buffer_len(), 0);
+    }
+    
+    #[test]
+    fn test_streaming_parser_partial_frame() {
+        let mut parser = PtiParser::new();
+        
+        // Send first half of frame
+        let part1 = vec![
+            0x5B, 0x19, 0x00, 0x02, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        
+        let frames = parser.parse(&part1);
+        assert_eq!(frames.len(), 0); // No complete frames yet
+        assert!(parser.buffer_len() > 0); // Data is buffered
+        
+        // Send second half
+        let part2 = vec![
+            0x00, 0xF8, 0x01, 0x02, 0x03, 0x04, 0x05,
+            0xF9, 0x9D, 0x01, 0x01, 0x06, 0x52, 0x5D,
+        ];
+        
+        let frames = parser.parse(&part2);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].payload, vec![0x01, 0x02, 0x03, 0x04, 0x05]);
+        assert_eq!(parser.buffer_len(), 0);
+    }
+    
+    #[test]
+    fn test_streaming_parser_multiple_frames() {
+        let mut parser = PtiParser::new();
+        
+        // Two complete frames in one data block
+        // Frame 1: v2 DCH with 3-byte OTA
+        let mut data = vec![
+            0x5B, 0x17, 0x00, // START + LENGTH(23)
+            0x02, 0x00, // VERSION
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // TIMESTAMP
+            0x00, 0x00, // TYPE
+            0x00, // SEQ
+            0xF8, 0x01, 0x02, 0x03, // PTI: START + 3 OTA
+            0xF9, 0x9D, 0x01, 0x01, 0x06, 0x52, // END + APPENDED_INFO
+            0x5D, // DCH END
+        ];
+        
+        // Add second frame with 3-byte OTA
+        data.extend_from_slice(&[
+            0x5B, 0x17, 0x00, // START + LENGTH(23)
+            0x02, 0x00, // VERSION
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // TIMESTAMP
+            0x00, 0x00, // TYPE
+            0x00, // SEQ
+            0xF8, 0x04, 0x05, 0x06, // PTI: START + 3 OTA
+            0xF9, 0x80, 0x02, 0x02, 0x06, 0x52, // END + APPENDED_INFO
+            0x5D, // DCH END
+        ]);
+        
+        let frames = parser.parse(&data);
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].payload, vec![0x01, 0x02, 0x03]);
+        assert_eq!(frames[1].payload, vec![0x04, 0x05, 0x06]);
+        assert_eq!(frames[1].region, Region::US);
+    }
+    
+    #[test]
+    fn test_streaming_parser_skip_garbage() {
+        let mut parser = PtiParser::new();
+        
+        // Garbage bytes followed by a valid frame
+        let mut data = vec![0xFF, 0xFF, 0x00, 0x00, 0xFF]; // Garbage
+        data.extend_from_slice(&[
+            0x5B, 0x17, 0x00, // START + LENGTH(23)
+            0x02, 0x00, // VERSION
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // TIMESTAMP
+            0x00, 0x00, // TYPE
+            0x00, // SEQ
+            0xF8, 0x01, 0x02, 0x03, // PTI: START + 3 OTA
+            0xF9, 0x9D, 0x01, 0x01, 0x06, 0x52, // END + APPENDED_INFO
+            0x5D, // DCH END
+        ]);
+        
+        let frames = parser.parse(&data);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].payload, vec![0x01, 0x02, 0x03]);
+    }
+    
+    #[test]
+    fn test_streaming_parser_reset() {
+        let mut parser = PtiParser::new();
+        
+        let part1 = vec![0x5B, 0x19, 0x00, 0x02, 0x00];
+        parser.parse(&part1);
+        assert!(parser.buffer_len() > 0);
+        
+        parser.reset();
+        assert_eq!(parser.buffer_len(), 0);
     }
 }
