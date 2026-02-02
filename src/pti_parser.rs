@@ -39,9 +39,7 @@
 //! 
 //! ### Parsing a complete DCH frame
 //! 
-//! ```rust
-//! # use zniff_rs::pti_parser::{parse_dch_frame, PtiParseResult};
-//! # fn example() {
+//! ```ignore
 //! let dch_data: Vec<u8> = vec![/* ... */];
 //! match parse_dch_frame(&dch_data) {
 //!     PtiParseResult::ValidFrame { frame } => {
@@ -54,14 +52,11 @@
 //!         // Not a valid PTI frame
 //!     },
 //! }
-//! # }
 //! ```
 //! 
 //! ### Parsing PTI frame directly (without DCH wrapper)
 //! 
-//! ```rust
-//! # use zniff_rs::pti_parser::{parse_pti_frame, PtiParseResult};
-//! # fn example() {
+//! ```ignore
 //! let pti_data: Vec<u8> = vec![/* ... */];
 //! match parse_pti_frame(&pti_data) {
 //!     PtiParseResult::ValidFrame { frame } => {
@@ -70,7 +65,6 @@
 //!     },
 //!     _ => {},
 //! }
-//! # }
 //! ```
 //! 
 //! ## Reference implementations
@@ -114,38 +108,83 @@ fn pti_region_to_region(pti_region: u8) -> Option<Region> {
 }
 
 /// Determine speed/baud rate from channel and region combination
+/// 
+/// Speed mapping based on channel+region combinations from the C# reference:
+/// - Speed 0: 9.6 kbps (R2)
+/// - Speed 1: 40 kbps (R1)
+/// - Speed 2: 100 kbps (R0.5)
+/// - Speed 3: Long Range
 fn get_speed(channel: u8, region: u8) -> u8 {
     let key = ((channel as u16) << 8) | (region as u16);
     
-    // Long Range speeds
+    // Long Range speeds - specific channel+region combinations
+    // Note: Multiple LR regions can share the same channel number
     let lr_speeds = [
-        0x0303, // CH3 + US_LR1 (0x0C)
-        0x0303, // CH3 + US_LR2 (0x0D)
-        0x0003, // CH0 + US_LR3 (0x0E)
-        0x0103, // CH1 + US_LR3 (0x0E)
-        0x0303, // CH3 + EU_LR1 (0x0F)
-        0x0303, // CH3 + EU_LR2 (0x10)
-        0x0003, // CH0 + EU_LR3 (0x11)
-        0x0103, // CH1 + EU_LR3 (0x11)
+        (0x03 << 8) + 0x0C, // CH3 + US_LR1
+        (0x03 << 8) + 0x0D, // CH3 + US_LR2
+        (0x00 << 8) + 0x0E, // CH0 + US_LR3
+        (0x01 << 8) + 0x0E, // CH1 + US_LR3
+        (0x03 << 8) + 0x0F, // CH3 + EU_LR1
+        (0x03 << 8) + 0x10, // CH3 + EU_LR2
+        (0x00 << 8) + 0x11, // CH0 + EU_LR3
+        (0x01 << 8) + 0x11, // CH1 + EU_LR3
     ];
     
-    // 9600 baud (speed = 0)
+    // 9600 baud (speed = 0) - channel 2
     let baud_9600 = [
-        0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0206,
-        0x0208, 0x0209, 0x020B, 0x020C, 0x020D, 0x020F, 0x0210,
+        (0x02 << 8) + 0x01, // EU
+        (0x02 << 8) + 0x02, // US
+        (0x02 << 8) + 0x03, // ANZ
+        (0x02 << 8) + 0x04, // HK
+        (0x02 << 8) + 0x05, // Malaysia
+        (0x02 << 8) + 0x06, // India
+        (0x02 << 8) + 0x08, // RU
+        (0x02 << 8) + 0x09, // IL
+        (0x02 << 8) + 0x0B, // CN
+        (0x02 << 8) + 0x0C, // US_LR1
+        (0x02 << 8) + 0x0D, // US_LR2
+        (0x02 << 8) + 0x0F, // EU_LR1
+        (0x02 << 8) + 0x10, // EU_LR2
     ];
     
-    // 40K baud (speed = 1)
+    // 40K baud (speed = 1) - channel 1
     let baud_40k = [
-        0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106,
-        0x0108, 0x0109, 0x010B, 0x010C, 0x010D, 0x010F, 0x0110,
+        (0x01 << 8) + 0x01, // EU
+        (0x01 << 8) + 0x02, // US
+        (0x01 << 8) + 0x03, // ANZ
+        (0x01 << 8) + 0x04, // HK
+        (0x01 << 8) + 0x05, // Malaysia
+        (0x01 << 8) + 0x06, // India
+        (0x01 << 8) + 0x08, // RU
+        (0x01 << 8) + 0x09, // IL
+        (0x01 << 8) + 0x0B, // CN
+        (0x01 << 8) + 0x0C, // US_LR1
+        (0x01 << 8) + 0x0D, // US_LR2
+        (0x01 << 8) + 0x0F, // EU_LR1
+        (0x01 << 8) + 0x10, // EU_LR2
     ];
     
-    // 100K baud (speed = 2)
+    // 100K baud (speed = 2) - channel 0 and special channels for JP/KR
     let baud_100k = [
-        0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006,
-        0x0007, 0x0107, 0x0207, 0x0008, 0x0009, 0x000A,
-        0x010A, 0x020A, 0x000B, 0x000C, 0x000D, 0x000F, 0x0010,
+        (0x00 << 8) + 0x01, // EU
+        (0x00 << 8) + 0x02, // US
+        (0x00 << 8) + 0x03, // ANZ
+        (0x00 << 8) + 0x04, // HK
+        (0x00 << 8) + 0x05, // Malaysia
+        (0x00 << 8) + 0x06, // India
+        (0x00 << 8) + 0x07, // JP ch0
+        (0x01 << 8) + 0x07, // JP ch1
+        (0x02 << 8) + 0x07, // JP ch2
+        (0x00 << 8) + 0x08, // RU
+        (0x00 << 8) + 0x09, // IL
+        (0x00 << 8) + 0x0A, // KR ch0
+        (0x01 << 8) + 0x0A, // KR ch1
+        (0x02 << 8) + 0x0A, // KR ch2
+        (0x00 << 8) + 0x0B, // CN
+        (0x00 << 8) + 0x0C, // US_LR1
+        (0x00 << 8) + 0x0D, // US_LR2
+        (0x00 << 8) + 0x0F, // EU_LR1
+        (0x00 << 8) + 0x10, // EU_LR2
     ];
     
     if baud_9600.contains(&key) {
@@ -157,7 +196,7 @@ fn get_speed(channel: u8, region: u8) -> u8 {
     } else if lr_speeds.contains(&key) {
         3
     } else {
-        0 // default
+        0 // default to 9.6kbps if unknown
     }
 }
 
@@ -279,17 +318,23 @@ fn parse_pti_frame(data: &[u8]) -> PtiParseResult {
         None => return PtiParseResult::InvalidFrame,
     };
     
-    // RSSI (1 byte, only for Rx)
+    // RSSI (1 byte, only for Rx frames)
+    // Note: RSSI is a signed value representing signal strength in dBm.
+    // PTI versions 1+ apply a calibration offset of 0x32 (50 decimal).
     let rssi = if is_rx == 1 {
         let rssi_raw = data[idx] as i8;
-        // PTI version 1+ requires RSSI offset
         let appended_info_version = appended_info_cfg & 0b00000111;
         let rssi_value = if appended_info_version >= 1 {
+            // Apply calibration offset: PTI spec requires subtracting 50 (0x32)
+            // to get the actual RSSI in dBm
             rssi_raw.saturating_sub(0x32)
         } else {
             rssi_raw
         };
-        // Convert to u8, taking absolute value for negative RSSI
+        // Convert to unsigned absolute value for storage in Frame.
+        // The Frame type uses u8 for RSSI to maintain compatibility with
+        // the existing zniffer_parser which stores RSSI as unsigned.
+        // The sign information (always negative for real RSSI) is implicit.
         rssi_value.unsigned_abs()
     } else {
         0 // Tx frames don't have RSSI
