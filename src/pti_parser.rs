@@ -109,12 +109,12 @@ pub enum PtiParseResult {
 /// DCH frames have the format:
 /// [START_SYMBOL][LENGTH(2)][VERSION(2)][TIMESTAMP(4-8)][DCH_TYPE(2)][FLAGS(4)][SEQ(2)][PAYLOAD][END_SYMBOL]
 pub fn parse_dch_frame(data: &[u8]) -> PtiParseResult {
-    // Minimum DCH frame size check
-    if data.len() < 15 {
+    // Check for minimum possible DCH frame (need at least start, length, version, end)
+    if data.len() < 6 {
         return PtiParseResult::IncompleteFrame;
     }
     
-    // Check start symbol
+    // Check start symbol first
     if data[0] != DCH_START_SYMBOL {
         return PtiParseResult::InvalidFrame;
     }
@@ -350,6 +350,124 @@ mod tests {
         match parse_dch_frame(&incomplete_data) {
             PtiParseResult::IncompleteFrame => {},
             _ => panic!("Expected IncompleteFrame"),
+        }
+    }
+    
+    #[test]
+    fn test_parse_pti_frame_tx() {
+        // Sample PTI frame with Tx data (no RSSI)
+        let pti_data = vec![
+            0xFC, // HW_TX_START
+            // OTA data (Z-Wave packet)
+            0x01, 0x02, 0x03, 0x04,
+            0xFD, // HW_TX_SUCCESS
+            // APPENDED_INFO (4 bytes for Tx, no RSSI)
+            0x02,       // RADIO_CONFIG: US region (0x02)
+            0x02,       // RADIO_INFO: channel 2
+            0x06,       // STATUS_0: Z-Wave protocol
+            0x08,       // APPENDED_INFO_CFG: is_rx=0, length=1 (for 4 total bytes), version=0
+        ];
+        
+        match parse_pti_frame(&pti_data) {
+            PtiParseResult::ValidFrame { frame } => {
+                assert_eq!(frame.region, Region::US);
+                assert_eq!(frame.channel, 2);
+                assert_eq!(frame.rssi, 0); // Tx has no RSSI
+                assert_eq!(frame.payload, vec![0x01, 0x02, 0x03, 0x04]);
+            }
+            _ => panic!("Expected ValidFrame for Tx"),
+        }
+    }
+    
+    #[test]
+    fn test_parse_pti_frame_different_speed() {
+        // Test 100K speed (speed=2) with US region and channel 0
+        let pti_data = vec![
+            0xF8, // HW_RX_START
+            0x01, 0x02, 0x03,
+            0xF9, // HW_RX_SUCCESS
+            0x80,       // RSSI
+            0x02,       // RADIO_CONFIG: US region (0x02)
+            0x00,       // RADIO_INFO: channel 0
+            0x06,       // STATUS_0: Z-Wave protocol
+            0x52,       // APPENDED_INFO_CFG: is_rx=1, length=2, version=2
+        ];
+        
+        match parse_pti_frame(&pti_data) {
+            PtiParseResult::ValidFrame { frame } => {
+                assert_eq!(frame.region, Region::US);
+                assert_eq!(frame.speed, 2); // 100K based on channel 0 + US region
+            }
+            _ => panic!("Expected ValidFrame"),
+        }
+    }
+    
+    #[test]
+    fn test_parse_pti_frame_wakeup_beam() {
+        // Frame starting with 0x55 should be rejected (wake-up beam)
+        let pti_data = vec![
+            0xF8, // HW_RX_START
+            0x55, 0x55, 0x55, // Wake-up beam pattern
+            0xF9, // HW_RX_SUCCESS
+            0x80, 0x01, 0x01, 0x06, 0x52,
+        ];
+        
+        match parse_pti_frame(&pti_data) {
+            PtiParseResult::InvalidFrame => {},
+            _ => panic!("Expected InvalidFrame for wake-up beam"),
+        }
+    }
+    
+    #[test]
+    fn test_parse_dch_v3_frame() {
+        // DCH v3 frame has 8-byte timestamp and additional fields
+        let dch_data = vec![
+            0x5B,       // DCH_START
+            0x1E, 0x00, // LENGTH (30 bytes for v3 header + payload)
+            0x03, 0x00, // VERSION (3)
+            // Timestamp (8 bytes for v3)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, // DCH_TYPE
+            0x00, 0x00, 0x00, 0x00, // FLAGS (4 bytes)
+            0x00, 0x00, // SEQUENCE (2 bytes)
+            // PTI payload starts here (index 21)
+            0xF8,       // HW_RX_START
+            0x01, 0x02, 0x03, // OTA data (3 bytes)
+            0xF9,       // HW_RX_SUCCESS
+            0x80, 0x01, 0x01, 0x06, 0x52, // APPENDED_INFO (5 bytes)
+            0x5D,       // DCH_END
+        ];
+        
+        match parse_dch_frame(&dch_data) {
+            PtiParseResult::ValidFrame { frame } => {
+                assert_eq!(frame.region, Region::EU);
+                assert_eq!(frame.payload, vec![0x01, 0x02, 0x03]);
+            }
+            _ => panic!("Expected ValidFrame from DCH v3 frame"),
+        }
+    }
+    
+    #[test]
+    fn test_invalid_dch_start_symbol() {
+        let invalid_data = vec![0x5C, 0x10, 0x00, 0x02, 0x00, 0x00]; // 6 bytes, wrong start
+        match parse_dch_frame(&invalid_data) {
+            PtiParseResult::InvalidFrame => {},
+            _ => panic!("Expected InvalidFrame for bad start symbol"),
+        }
+    }
+    
+    #[test]
+    fn test_invalid_dch_end_symbol() {
+        let invalid_data = vec![
+            0x5B,       // DCH_START (correct)
+            0x05, 0x00, // LENGTH = 5
+            0x02, 0x00, // VERSION
+            0x00,       // Some data
+            0x5C,       // Wrong end symbol (should be 0x5D)
+        ];
+        match parse_dch_frame(&invalid_data) {
+            PtiParseResult::InvalidFrame => {},
+            _ => panic!("Expected InvalidFrame for bad end symbol"),
         }
     }
 }
