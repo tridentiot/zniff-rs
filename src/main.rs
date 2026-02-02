@@ -24,6 +24,7 @@ use crate::zniffer_parser::ParserResult;
 
 mod types;
 mod zniffer_parser;
+mod pti_parser;
 
 mod generator;
 use crate::generator::FrameGenerator;
