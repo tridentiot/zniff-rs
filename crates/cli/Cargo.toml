@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 # SPDX-License-Identifier: MIT
 [package]
-name = "zniff-rs"
+name = "zniff-rs-cli"
 version = "0.1.0"
 edition = "2024"
 
