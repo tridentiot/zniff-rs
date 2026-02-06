@@ -1,0 +1,10 @@
+[package]
+name = "zniff-rs-tui"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+
+[dependencies]
+ratatui = "0.30.0"
