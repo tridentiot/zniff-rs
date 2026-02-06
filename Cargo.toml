@@ -1,3 +1,11 @@
+# SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+# SPDX-License-Identifier: MIT
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/tridentiot/zniff-rs"
+readme = "README.md"
+
 [workspace]
 members = [
     "crates/cli",
