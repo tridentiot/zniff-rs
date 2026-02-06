@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "crates/cli",
+]
+resolver = "2"   # recommended for modern feature resolution
