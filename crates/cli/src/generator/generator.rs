@@ -45,13 +45,15 @@ impl FrameGenerator {
                 ZlfRecord::Other(raw) => {
                     println!(
                         "#{:06} {:?} sof='{}' len={}",
-                        n, raw.typ, raw.sof as char, raw.payload.len()
+                        n, raw.frame_type, raw.sof as char, raw.payload.len()
                     );
                     stream.write_all(&raw.payload)?;
                     std::thread::sleep(std::time::Duration::from_millis(self.delay as u64));
                 }
             }
         }
+        println!("End of file reached after {} frames", n);
+        println!("Total frames read: {}", reader.frame_count());
         Ok(())
     }
 }
