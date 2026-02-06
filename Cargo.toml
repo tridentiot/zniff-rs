@@ -8,6 +8,6 @@ readme = "README.md"
 
 [workspace]
 members = [
-    "crates/cli",
+    "crates/cli", "crates/tui",
 ]
 resolver = "2"   # recommended for modern feature resolution
