@@ -1,4 +1,4 @@
-use crate::frame::*;
+use crate::decoder::*;
 
 pub struct ZWaveFrameDecoder;
 

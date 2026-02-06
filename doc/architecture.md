@@ -4,100 +4,119 @@ Zniffer-RS System Architecture
 Overall Architecture of the rust zniffer Application
 
 
-```plantuml
-@startuml
+```mermaid
+flowchart TB
+    subgraph "Data Storage"
+        Database[Database]
+        PackageSource[PackageSource]
+    end
 
-title System Architecture Diagram
+    subgraph "Frame Analysis"
+        FrameDecoders[FrameDecoders]
+        ConversationAnalyzer[ConversationAnalyzer]
+    end
 
-package "Data Storage" {
-    [Database]
-    [PackageSource]
-}
+    subgraph "UI"
+        UIFrameView[UIFrameView]
+        UICaptureView[UICaptureView]
+        UIViewController[UIViewController]
+    end
 
-package "Frame Analysis" {
-    [FrameDecoders]
-    [ConversationAnalyzer]
-}
+    subgraph "CLI"
+        CommandLineInterface[CommandLineInterface]
+    end
 
-package "UI" {
-    [UIFrameView]
-    [UICaptureView]
-    [UIViewController]
-}
+    subgraph "Frame Extraction"
+        FrameExtractor[FrameExtractor]
+    end
 
-package "CLI" {
-    [CommandLineInterface]
-}
-
-package "Frame Extraction" {
-    [FrameExtractor]
-}
-
-[PackageSource] --> [Database]
-[Database] --> [FrameExtractor]
-[FrameExtractor] --> [FrameDecoders]
-
-[UIFrameView] <- [FrameDecoders] 
-[UICaptureView] -> [PackageSource]
-[UIViewController] -> [FrameExtractor]
-@enduml
+    PackageSource --> Database
+    Database --> FrameExtractor
+    FrameExtractor --> FrameDecoders
+    FrameDecoders --> UIFrameView
+    UICaptureView --> PackageSource
+    UIViewController --> FrameExtractor
 ```
 
-```plantuml
+```mermaid
+classDiagram
+    class PackageSource {
+        <<interface>>
+    }
 
-interface PackageSource {
+    class PTISource {
+    }
 
-}
+    class ZNFSource {
+    }
 
-class PTISource  {
+    class EthernetSource {
+    }
 
-}
+    class FrameExtractor {
+        +getFrames(start, stop)
+        +getStartTime()
+        +getEndTime()
+    }
 
-class ZNFSource  {
+    class Database {
+    }
 
-}
+    class DecodedChunk {
+        -start
+        -stop
+        -fields[]
+        -children[] DecodedChunk
+    }
 
-class EthernetSource
+    class Frame {
+        -timestamp
+        -raw_data
+    }
 
-class FrameExtractor {
-    +getFrames(start,stop)
-    +getStartTime()
-    +getEndTime()
-}
+    class FrameDecoder {
+        <<interface>>
+    }
 
-class Database
+    class ZWBasic {
+    }
 
+    class ZWVersion {
+    }
 
-class DecodedChunk {
-    - start
-    - stop
-    - fields[]
-    - children[] : DecodedChunk
-}
+    class ZWProtocol {
+    }
 
-class Frame {
-    - timestamp
-    - raw_data
-    - 
-}
+    class CoreApp {
+        - package_sources[]
+        - database
+        - frame_extractor
+    }
 
-interface FrameDecoder {
-    +is_my_frame()
-    +consume(Frame)
-}
+    class TuiApp {
+        - core_app
+        - decoders
+    }
 
-
-FrameExtractor -- Database
-PackageSource -- Database
-
-PackageSource --|> PTISource
-PackageSource --|> ZNFSource
-PackageSource --|> EthernetSource
+    class Decoders {
+        - frame_decoder[]
+    }
 
 
+    CoreApp --> Database
+    CoreApp --> PackageSource
+    CoreApp --> FrameExtractor
+    
+    TuiApp --> CoreApp
+    TuiApp --> Decoders
 
-FrameDecoder --|> ZWBasic
-FrameDecoder --|> ZWVersion
-FrameDecoder --|> ZWProtocol
+    Decoders --> FrameDecoder
 
+    PackageSource <|-- PTISource
+    PackageSource <|-- ZNFSource
+    PackageSource <|-- EthernetSource
+
+    FrameDecoder <|-- ZWBasic
+    FrameDecoder <|-- ZWVersion
+    FrameDecoder <|-- ZWProtocol
 ```
