@@ -12,12 +12,14 @@ const SOF_FRAME: u8 = 0x21;
 #[derive(PartialEq)]
 pub enum ParserResult {
   ValidCommand {
-    id: u8, // TODO: Define the proper fields.
+    id: u8,
+    payload: Vec<u8>,
   },
   ValidFrame {
     frame: Frame,
   },
-  IncompleteFrame
+  IncompleteFrame,
+  InvalidFrame,
 }
 
 #[derive(Debug)]
@@ -36,6 +38,7 @@ enum ParserState {
   AwaitStartofDataTwo,
 }
 
+#[derive(Debug)]
 pub struct Parser {
   state: ParserState,
   command_id: u8,
@@ -72,8 +75,19 @@ impl Parser {
     self.frame = Frame::default();
   }
 
-  pub fn parse(&mut self, input: Vec<u8>) -> ParserResult {
+  pub fn parse_bytes(&mut self, input: Vec<u8>) -> ParserResult {
     for value in input {
+      let result = self.parse(value);
+      if result != ParserResult::IncompleteFrame {
+        return result;
+      }
+    }
+    ParserResult::IncompleteFrame
+  }
+
+  pub fn parse(&mut self, value: u8) -> ParserResult {
+    //println!("{:?}", self);
+    //for value in input {
       //print!("0x{:02X} ", value);
       match self.state {
         ParserState::AwaitStartOfFrame => {
@@ -92,6 +106,7 @@ impl Parser {
           } else {
             // Unsupported command. Reset.
             self.reset();
+            return ParserResult::InvalidFrame;
           }
         },
         ParserState::AwaitType => {
@@ -100,6 +115,7 @@ impl Parser {
             self.state = ParserState::AwaitTimestamp;
           } else {
             self.reset();
+            return ParserResult::InvalidFrame;
           }
         },
         ParserState::AwaitTimestamp => {
@@ -125,7 +141,7 @@ impl Parser {
             },
             Err(_) => {
               self.reset();
-              continue;
+              return ParserResult::InvalidFrame;
             },
           };
         },
@@ -138,6 +154,7 @@ impl Parser {
             self.state = ParserState::AwaitStartofDataTwo;
           } else {
               self.reset();
+              return ParserResult::InvalidFrame;
           }
         },
         ParserState::AwaitStartofDataTwo => {
@@ -145,12 +162,22 @@ impl Parser {
             self.state = ParserState::AwaitLength;
           } else {
               self.reset();
+              return ParserResult::InvalidFrame;
           }
         },
         ParserState::AwaitLength => {
           self.length = value;
           self.payload_count = self.length;
-          self.state = ParserState::AwaitPayload
+          if self.length == 0 {
+            // No payload, so we can return the frame immediately.
+            let result: ParserResult;
+            // TODO: Check for command vs. frame. Assuming command for now.
+            result = ParserResult::ValidCommand { id: self.command_id, payload: vec![] };
+            self.reset();
+            return result;
+          } else {
+            self.state = ParserState::AwaitPayload
+          }
         },
         ParserState::AwaitPayload => {
           self.frame.payload.push(value);
@@ -162,14 +189,14 @@ impl Parser {
               // will continue parsing and overwrite self.frame.
               result = ParserResult::ValidFrame { frame: self.frame.clone() };
             } else {
-              result = ParserResult::ValidCommand { id: self.command_id };
+              result = ParserResult::ValidCommand { id: self.command_id, payload: self.frame.payload.clone() };
             }
             self.reset();
             return result;
           }
         },
       } // match
-    }
+    //}
     ParserResult::IncompleteFrame
   }
 
@@ -188,18 +215,18 @@ mod tests {
       let mut parser = Parser::new();
 
       // Start of Frame
-      let result: ParserResult = parser.parse(vec![SOF_COMMAND]);
+      let result: ParserResult = parser.parse_bytes(vec![SOF_COMMAND]);
       assert_eq!(result, ParserResult::IncompleteFrame);
 
       parser.timeout();
       assert_eq!(parser.state, ParserState::AwaitStartOfFrame);
 
-      let result = parser.parse(vec![SOF_FRAME]);
+      let result = parser.parse_bytes(vec![SOF_FRAME]);
       assert_eq!(result, ParserResult::IncompleteFrame);
       assert_eq!(parser.state, ParserState::AwaitType);
       parser.timeout();
 
-      let result = parser.parse(vec![
+      let result = parser.parse_bytes(vec![
         0x21, // FRAME SOF
         0x01, // FRAME TYPE
         0x6D, 0xCE, // TIMESTAMP
@@ -227,7 +254,7 @@ mod tests {
         }
        });
 
-      let result = parser.parse(vec![
+      let result = parser.parse_bytes(vec![
         0x21, 0x01, 0x63, 0xEF, 0x02, 0x00, 0xC8, 0x21, 0x03
       ]);
       assert_eq!(result, ParserResult::IncompleteFrame);
@@ -235,7 +262,7 @@ mod tests {
 
       println!("New frame");
 
-      let result = parser.parse(vec![
+      let result = parser.parse_bytes(vec![
         0x21,
         0x01,
         0x44, 0x9E,

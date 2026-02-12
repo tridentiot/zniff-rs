@@ -1,5 +1,18 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
+use std::panic;
+use tracing::error;
+use tokio;
+
+use clap::Parser;
+use std::fs::File;
+use zniff_rs_core::zlf::{
+    ZlfReader,
+    ZlfRecord,
+};
+use zniff_rs_core::zniffer_parser;
+use zniff_rs_core::storage::{FrameDatabase, SqliteFrameDatabase, DbFrame};
+
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -62,38 +75,70 @@ struct Frame {
 }
 
 struct App {
-    items: Vec<Frame>,
+    items: Vec<u128>,
     state: TableState,
     mode: AppMode,
+    db: SqliteFrameDatabase,
 }
 
 impl App {
-    fn new() -> App {
+    fn try_new(file: File) -> Result<App, bool> {
         let mut state = TableState::default();
         state.select(Some(0));
 
-        // Generate 10,000 items to demonstrate performance with large datasets
-        let items: Vec<Frame> = (1..=10000)
-            .map(|i| Frame {
-                id: i as u64,
-                timestamp: i * 100,
-                src_node_id: ((i % 232) + 1) as u16, // Node IDs from 1 to 232
-                dst_node_id: ((i % 232) + 1) as u16,
-                home_id: 0,
-                timestamp_delta: 0,
-                speed: 0,
-                rssi: 0,
-                channel: 0,
-                payload: String::new(),
-                payload_raw: Vec::new(),
-            })
-            .collect();
+        let mut zlf_reader = ZlfReader::new(file).expect("Failed to create ZLF reader");
 
-        App {
+        let db = SqliteFrameDatabase::new();
+
+        let mut items: Vec<u128> = Vec::new();
+        let mut frame_id: u128 = 1;
+
+        let mut zniffer_parser = zniffer_parser::Parser::new();
+
+        zlf_reader.read_frames(|rec| {
+            match rec {
+                ZlfRecord::Other(raw) => {
+                    for byte in raw.payload.iter() {
+                        let result = zniffer_parser.parse(*byte);
+
+                        match result {
+                            zniffer_parser::ParserResult::ValidFrame { frame } => {
+                                items.push(frame_id);
+
+                                let db_frame = DbFrame {
+                                    id: frame_id as i64, // You can generate or extract an ID for the frame
+                                    timestamp: frame.timestamp as i64, // You can extract this from the frame if needed
+                                    speed: frame.speed,     // You can extract this from the frame if needed
+                                    rssi: frame.rssi as i8,      // You can extract this from the frame if needed
+                                    channel: frame.channel,   // You can extract this from the frame if needed
+                                    home_id: 0x12345678, // Example home_id, replace with actual value if available
+                                    src_node_id: 1, // Example src_node_id, replace with actual value if available
+                                    dst_node_id: 2, // Example dst_node_id, replace with actual value if available
+                                    payload: frame.payload.clone(), // Use the raw payload from the parsed frame
+                                };
+
+                                //println!("Insert frame");
+                                db.add_frame(db_frame);
+                                frame_id += 1;
+                            },
+                            _ => {
+                                // Don't care about other parser results than a valid frame for now.
+                            },
+                        }
+                    }
+                },
+                _ => {
+                    // Don't care about other record types for now.
+                }
+            }
+        }).expect("Failed to read frames from ZLF file");
+
+        Ok(App {
             items,
             state,
             mode: AppMode::Normal,
-        }
+            db
+        })
     }
 
     fn next(&mut self) {
@@ -150,8 +195,9 @@ impl App {
         }
     }
 
-    fn add(&mut self, item: Frame) {
-        self.items.push(item);
+    fn add(&mut self, _item: Frame) {
+        // TODO: Modify this function to actually add the frame to the database and update the items list accordingly.
+        //self.items.push(item);
         self.state.select(Some(self.items.len() - 1));
     }
 
@@ -280,16 +326,47 @@ impl App {
     }
 }
 
-fn main() -> Result<(), io::Error> {
+#[derive(Parser)]
+#[command(name = "zniff-rs-tui")]
+#[command(about = "zniff-rs-tui is a tool for sniffing, parsing and converting Z-Wave data.", long_about = None)]
+struct Cli {
+    /// Path to the ZLF file to read frames from.
+    #[arg(short, long)]
+    trace: String,
+}
+
+fn install_panic_hook() {
+    let default = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        // TODO: restore terminal raw mode here if necessary
+        error!(?info, "panic occurred");
+        default(info);
+    }));
+}
+
+#[tokio::main]
+async fn main() -> Result<(), io::Error> {
+
+    install_panic_hook();
+    let cli = Cli::parse();
+
+    let file = File::open(&cli.trace)?;
+
+    // Create app state
+    let mut app = match App::try_new(file) {
+        Ok(app) => app,
+        Err(_) => {
+            eprintln!("Failed to create app");
+            return Ok(());
+        }
+    };
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
-    // Create app state
-    let mut app = App::new();
 
     // Run the app
     let res = run_app(&mut terminal, &mut app);
@@ -326,30 +403,46 @@ fn run_app(
             let visible_end = (visible_start + area_height).min(total_items);
             let visible_start = visible_start.min(total_items.saturating_sub(area_height));
 
-            // Only create ListItems for visible range
-            let items: Vec<Row> = app.items[visible_start..visible_end]
-                .iter()
-                .map(|item| {
-                    Row::new(vec![
-                        Cell::from(item.id.to_string()),
-                        Cell::from(item.timestamp.to_string()),
-                        Cell::from(item.timestamp_delta.to_string()),
-                        Cell::from(item.speed.to_string()),
-                        Cell::from(item.rssi.to_string()),
-                        Cell::from(item.channel.to_string()),
-                        Cell::from(item.home_id.to_string()),
-                        Cell::from(item.src_node_id.to_string()),
-                        Cell::from(item.dst_node_id.to_string()),
-                        Cell::from(item.payload.clone()),
-                        Cell::from(format!("{:02X?}", item.payload_raw)),
-                    ])
-                })
-                .collect();
+            let visible_count = visible_end - visible_start;
+
+            let frames = app.db.get_frames(visible_start, visible_count);
+
+            let mut previous_timestamp: Option<i64> = None;
+
+            let items: Vec<Row> = frames.iter().map(|frame| {
+                let timestamp_delta = if let Some(prev) = previous_timestamp {
+                    frame.timestamp - prev
+                } else {
+                    0
+                };
+                previous_timestamp = Some(frame.timestamp);
+
+                let home_id = 0x12345678; // Example home_id, replace with actual value if available
+                let src_node_id = 1; // Example src_node_id, replace with actual value if available
+                let dst_node_id = 2; // Example dst_node_id, replace with actual value
+
+                // Create string with the raw hex data of the payload.
+                let payload_hex = format!("{:02X?}", frame.payload);
+
+                Row::new(vec![
+                    Cell::from(frame.id.to_string()),
+                    Cell::from(frame.timestamp.to_string()),
+                    Cell::from(timestamp_delta.to_string()),
+                    Cell::from(frame.speed.to_string()),
+                    Cell::from(frame.rssi.to_string()),
+                    Cell::from(frame.channel.to_string()),
+                    Cell::from(format!("0x{:08X}", home_id)),
+                    Cell::from(src_node_id.to_string()),
+                    Cell::from(dst_node_id.to_string()),
+                    Cell::from(payload_hex.clone()), // This is supposed to be the parsed payload.
+                    Cell::from(payload_hex),
+                ])
+            }).collect::<Vec<Row>>();
 
             let header = [
                     "ID",
                     "Timestamp",
-                    "Timestamp Delta",
+                    "ΔTimestamp",
                     "Speed",
                     "RSSI",
                     "Channel",
@@ -366,13 +459,13 @@ fn run_app(
                 .height(1);
 
             let list = Table::new(items, &[
-                    Constraint::Length(20),
-                    Constraint::Length(20),
-                    Constraint::Length(20),
-                    Constraint::Length(20),
-                    Constraint::Length(20),
-                    Constraint::Length(20),
-                    Constraint::Length(10),
+                    Constraint::Length(5),
+                    Constraint::Length(15),
+                    Constraint::Length(15),
+                    Constraint::Length(6),
+                    Constraint::Length(6),
+                    Constraint::Length(7),
+                    Constraint::Length(15),
                     Constraint::Length(10),
                     Constraint::Length(10),
                     Constraint::Min(10),
@@ -399,8 +492,8 @@ fn run_app(
             // Render detail popup if in detail mode
             if app.mode == AppMode::Detail {
                 if let Some(selected_idx) = app.state.selected() {
-                    if let Some(frame) = app.items.get(selected_idx) {
-                        render_detail_popup(f, frame);
+                    if let Some(frame_id) = app.items.get(selected_idx) {
+                        render_detail_popup(f, *frame_id, &app);
                     }
                 }
             }
@@ -421,9 +514,15 @@ fn run_app(
     }
 }
 
-fn render_detail_popup(f: &mut ratatui::Frame, frame: &Frame) {
+fn render_detail_popup(f: &mut ratatui::Frame, frame_id: u128, app: &App) {
     // Create a centered rectangle (70% width, 70% height)
     let area = centered_rect(70, 70, f.area());
+
+    // Fetch the frame details from the database using the frame_id
+    let frame = match app.db.get_frame(frame_id as u64) {
+        Some(frame) => frame,
+        None => DbFrame { id: 0, channel: 0, speed: 0, timestamp: 0, rssi: 0, home_id: 0, src_node_id: 0, dst_node_id: 0, payload: vec![] },
+    };
 
     // Format the detailed information
     let detail_text = format!(
@@ -442,15 +541,15 @@ fn render_detail_popup(f: &mut ratatui::Frame, frame: &Frame) {
         Press Enter or Esc to close",
         frame.id,
         frame.timestamp,
-        frame.timestamp_delta,
+        0, //frame.timestamp_delta,
         frame.speed,
         frame.rssi,
         frame.channel,
-        frame.home_id,
-        frame.src_node_id,
-        frame.dst_node_id,
-        frame.payload,
-        frame.payload_raw
+        0x12345678, //frame.home_id,
+        1, //frame.src_node_id,
+        2, //frame.dst_node_id,
+        "frame.payload",
+        frame.payload, //frame.payload_raw
     );
 
     let paragraph = Paragraph::new(detail_text)

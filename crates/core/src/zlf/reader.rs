@@ -126,6 +126,17 @@ impl<R: Read + Seek> ZlfReader<R> {
         self.frame_counter
     }
 
+    /// Read 2048 bytes and invoke a callback for each frame. Returns Ok(()) at EOF.
+    pub fn read_frames<F>(&mut self, mut callback: F) -> Result<(), ZlfError>
+    where
+        F: FnMut(ZlfRecord),
+    {
+        while let Some(frame) = self.next()? {
+            callback(frame);
+        }
+        Ok(())
+    }
+
     /// Read the next frame. Returns Ok(None) at EOF.
     pub fn next(&mut self) -> Result<Option<ZlfRecord>, ZlfError> {
         // Read a timestamp of 8 bytes
@@ -145,7 +156,7 @@ impl<R: Read + Seek> ZlfReader<R> {
         let mut payload_length = [0u8; 4];
         self.r.read_exact(&mut payload_length)?;
         let payload_length: u32 = u32::from_le_bytes(payload_length);
-        println!("Payload length: {:?}", payload_length);
+        //println!("Payload length: {:?}", payload_length);
 
         let mut payload: Vec<u8> = vec![0u8; payload_length as usize];
         let mut read = 0usize;
@@ -157,10 +168,10 @@ impl<R: Read + Seek> ZlfReader<R> {
             read += n;
         }
 
-        for byte in &payload {
-            print!("{:02X} ", byte);
-        }
-        println!();
+        //for byte in &payload {
+        //    print!("{:02X} ", byte);
+        //}
+        //println!();
 
         let mut api_type = [0u8; 1];
         self.r.read_exact(&mut api_type)?;
