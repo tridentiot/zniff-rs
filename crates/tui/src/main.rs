@@ -19,7 +19,9 @@ use ratatui::{
     },
     layout::{
         Constraint,
-        Layout
+        Layout,
+        Alignment,
+        Rect,
     },
     style::{
         Color,
@@ -32,7 +34,10 @@ use ratatui::{
         Row,
         TableState,
         Cell,
-        Table
+        Table,
+        Paragraph,
+        Wrap,
+        Clear,
     },
 };
 use std::io;
@@ -54,6 +59,7 @@ struct Frame {
 struct App {
     items: Vec<Frame>,
     state: TableState,
+    show_detail: bool,
 }
 
 impl App {
@@ -81,6 +87,7 @@ impl App {
         App {
             items,
             state,
+            show_detail: false,
         }
     }
 
@@ -173,6 +180,10 @@ impl App {
             payload: String::new(),
             payload_raw: Vec::new(),
         });
+    }
+
+    fn toggle_detail(&mut self) {
+        self.show_detail = !self.show_detail;
     }
 }
 
@@ -291,6 +302,15 @@ fn run_app(
             adjusted_state.select(Some(selected - visible_start));
 
             f.render_stateful_widget(list, chunks[0], &mut adjusted_state);
+
+            // Render detail popup if enabled
+            if app.show_detail {
+                if let Some(selected_idx) = app.state.selected() {
+                    if let Some(frame) = app.items.get(selected_idx) {
+                        render_detail_popup(f, frame);
+                    }
+                }
+            }
         })?;
 
         if event::poll(std::time::Duration::from_millis(100))? {
@@ -299,32 +319,138 @@ fn run_app(
                 if key.kind == event::KeyEventKind::Press {
                     // The check for key.kind is needed to avoid handling both press and release on Windows.
                     match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                        KeyCode::Down | KeyCode::Char('j') => app.next(),
-                        KeyCode::Up | KeyCode::Char('k') => app.previous(),
-                        KeyCode::PageDown => app.page_down(page_size),
-                        KeyCode::PageUp => app.page_up(page_size),
-                        KeyCode::Home => app.go_to_start(),
-                        KeyCode::End => app.go_to_end(),
-                        KeyCode::Char('n') => app.add(Frame {
-                            timestamp: 0,
-                            src_node_id: 0,
-                            dst_node_id: 0,
-                            home_id: 0,
-                            id: 0,
-                            timestamp_delta: 0,
-                            speed: 0,
-                            rssi: 0,
-                            channel: 0,
-                            payload: String::new(),
-                            payload_raw: Vec::new(),
-                        }),
-                        KeyCode::Char('s') => app.start(),
-                        KeyCode::Char('S') => app.stop(),
+                        KeyCode::Char('q') | KeyCode::Esc => {
+                            if app.show_detail {
+                                app.toggle_detail();
+                            } else {
+                                return Ok(());
+                            }
+                        }
+                        KeyCode::Enter => app.toggle_detail(),
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if !app.show_detail {
+                                app.next();
+                            }
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            if !app.show_detail {
+                                app.previous();
+                            }
+                        }
+                        KeyCode::PageDown => {
+                            if !app.show_detail {
+                                app.page_down(page_size);
+                            }
+                        }
+                        KeyCode::PageUp => {
+                            if !app.show_detail {
+                                app.page_up(page_size);
+                            }
+                        }
+                        KeyCode::Home => {
+                            if !app.show_detail {
+                                app.go_to_start();
+                            }
+                        }
+                        KeyCode::End => {
+                            if !app.show_detail {
+                                app.go_to_end();
+                            }
+                        }
+                        KeyCode::Char('n') => {
+                            if !app.show_detail {
+                                app.add(Frame {
+                                    timestamp: 0,
+                                    src_node_id: 0,
+                                    dst_node_id: 0,
+                                    home_id: 0,
+                                    id: 0,
+                                    timestamp_delta: 0,
+                                    speed: 0,
+                                    rssi: 0,
+                                    channel: 0,
+                                    payload: String::new(),
+                                    payload_raw: Vec::new(),
+                                });
+                            }
+                        }
+                        KeyCode::Char('s') => {
+                            if !app.show_detail {
+                                app.start();
+                            }
+                        }
+                        KeyCode::Char('S') => {
+                            if !app.show_detail {
+                                app.stop();
+                            }
+                        }
                         _ => {}
                     }
                 }
             }
         }
     }
+}
+
+fn render_detail_popup(f: &mut ratatui::Frame, frame: &Frame) {
+    // Create a centered rectangle (70% width, 70% height)
+    let area = centered_rect(70, 70, f.area());
+
+    // Format the detailed information
+    let detail_text = format!(
+        "Frame Details\n\n\
+        ID:               {}\n\
+        Timestamp:        {}\n\
+        Timestamp Delta:  {}\n\
+        Speed:            {}\n\
+        RSSI:             {} dBm\n\
+        Channel:          {}\n\
+        Home ID:          0x{:08X}\n\
+        Source Node ID:   {}\n\
+        Dest Node ID:     {}\n\
+        Payload:          {}\n\
+        Payload Raw:      {:02X?}\n\n\
+        Press Enter or Esc to close",
+        frame.id,
+        frame.timestamp,
+        frame.timestamp_delta,
+        frame.speed,
+        frame.rssi,
+        frame.channel,
+        frame.home_id,
+        frame.src_node_id,
+        frame.dst_node_id,
+        frame.payload,
+        frame.payload_raw
+    );
+
+    let paragraph = Paragraph::new(detail_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Frame Details")
+                .style(Style::default().bg(Color::Black))
+        )
+        .wrap(Wrap { trim: false })
+        .style(Style::default().fg(Color::White).bg(Color::Black));
+
+    // Clear the area and render the popup
+    f.render_widget(Clear, area);
+    f.render_widget(paragraph, area);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::vertical([
+        Constraint::Percentage((100 - percent_y) / 2),
+        Constraint::Percentage(percent_y),
+        Constraint::Percentage((100 - percent_y) / 2),
+    ])
+    .split(r);
+
+    Layout::horizontal([
+        Constraint::Percentage((100 - percent_x) / 2),
+        Constraint::Percentage(percent_x),
+        Constraint::Percentage((100 - percent_x) / 2),
+    ])
+    .split(popup_layout[1])[1]
 }
