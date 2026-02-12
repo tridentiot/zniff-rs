@@ -18,7 +18,7 @@ use crate::types::{
 };
 mod zw_parser;
 use zw_parser::ZwParser;
-mod zlf;
+use zniff_rs_core::zlf;
 
 use crate::zniffer_parser::ParserResult;
 

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
+pub mod zlf;
 mod db;
 
 pub fn add(left: u64, right: u64) -> u64 {
