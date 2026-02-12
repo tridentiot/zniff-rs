@@ -20,7 +20,6 @@ use ratatui::{
     layout::{
         Constraint,
         Layout,
-        Alignment,
         Rect,
     },
     style::{
@@ -42,6 +41,12 @@ use ratatui::{
 };
 use std::io;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum AppMode {
+    Normal,
+    Detail,
+}
+
 struct Frame {
     id: u64,
     timestamp: u64,
@@ -59,7 +64,7 @@ struct Frame {
 struct App {
     items: Vec<Frame>,
     state: TableState,
-    show_detail: bool,
+    mode: AppMode,
 }
 
 impl App {
@@ -87,7 +92,7 @@ impl App {
         App {
             items,
             state,
-            show_detail: false,
+            mode: AppMode::Normal,
         }
     }
 
@@ -183,7 +188,95 @@ impl App {
     }
 
     fn toggle_detail(&mut self) {
-        self.show_detail = !self.show_detail;
+        self.mode = match self.mode {
+            AppMode::Normal => AppMode::Detail,
+            AppMode::Detail => AppMode::Normal,
+        };
+    }
+
+    fn handle_key_event(&mut self, key: KeyCode, page_size: usize) -> io::Result<bool> {
+        match self.mode {
+            AppMode::Normal => self.handle_normal_mode_key(key, page_size),
+            AppMode::Detail => self.handle_detail_mode_key(key),
+        }
+    }
+
+    fn handle_normal_mode_key(&mut self, key: KeyCode, page_size: usize) -> io::Result<bool> {
+        match key {
+            KeyCode::Char('q') | KeyCode::Esc => Ok(true), // Signal to exit
+            KeyCode::Enter => {
+                self.toggle_detail();
+                Ok(false)
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.next();
+                Ok(false)
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.previous();
+                Ok(false)
+            }
+            KeyCode::PageDown => {
+                self.page_down(page_size);
+                Ok(false)
+            }
+            KeyCode::PageUp => {
+                self.page_up(page_size);
+                Ok(false)
+            }
+            KeyCode::Home => {
+                self.go_to_start();
+                Ok(false)
+            }
+            KeyCode::End => {
+                self.go_to_end();
+                Ok(false)
+            }
+            KeyCode::Char('n') => {
+                self.add(Frame {
+                    timestamp: 0,
+                    src_node_id: 0,
+                    dst_node_id: 0,
+                    home_id: 0,
+                    id: 0,
+                    timestamp_delta: 0,
+                    speed: 0,
+                    rssi: 0,
+                    channel: 0,
+                    payload: String::new(),
+                    payload_raw: Vec::new(),
+                });
+                Ok(false)
+            }
+            KeyCode::Char('s') => {
+                self.start();
+                Ok(false)
+            }
+            KeyCode::Char('S') => {
+                self.stop();
+                Ok(false)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn handle_detail_mode_key(&mut self, key: KeyCode) -> io::Result<bool> {
+        match key {
+            KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => {
+                self.toggle_detail();
+                Ok(false)
+            }
+            // Could add navigation between frames in detail view here
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.next();
+                Ok(false)
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.previous();
+                Ok(false)
+            }
+            _ => Ok(false),
+        }
     }
 }
 
@@ -303,8 +396,8 @@ fn run_app(
 
             f.render_stateful_widget(list, chunks[0], &mut adjusted_state);
 
-            // Render detail popup if enabled
-            if app.show_detail {
+            // Render detail popup if in detail mode
+            if app.mode == AppMode::Detail {
                 if let Some(selected_idx) = app.state.selected() {
                     if let Some(frame) = app.items.get(selected_idx) {
                         render_detail_popup(f, frame);
@@ -318,73 +411,9 @@ fn run_app(
                 let page_size = terminal.size()?.height.saturating_sub(3) as usize;
                 if key.kind == event::KeyEventKind::Press {
                     // The check for key.kind is needed to avoid handling both press and release on Windows.
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => {
-                            if app.show_detail {
-                                app.toggle_detail();
-                            } else {
-                                return Ok(());
-                            }
-                        }
-                        KeyCode::Enter => app.toggle_detail(),
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            if !app.show_detail {
-                                app.next();
-                            }
-                        }
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            if !app.show_detail {
-                                app.previous();
-                            }
-                        }
-                        KeyCode::PageDown => {
-                            if !app.show_detail {
-                                app.page_down(page_size);
-                            }
-                        }
-                        KeyCode::PageUp => {
-                            if !app.show_detail {
-                                app.page_up(page_size);
-                            }
-                        }
-                        KeyCode::Home => {
-                            if !app.show_detail {
-                                app.go_to_start();
-                            }
-                        }
-                        KeyCode::End => {
-                            if !app.show_detail {
-                                app.go_to_end();
-                            }
-                        }
-                        KeyCode::Char('n') => {
-                            if !app.show_detail {
-                                app.add(Frame {
-                                    timestamp: 0,
-                                    src_node_id: 0,
-                                    dst_node_id: 0,
-                                    home_id: 0,
-                                    id: 0,
-                                    timestamp_delta: 0,
-                                    speed: 0,
-                                    rssi: 0,
-                                    channel: 0,
-                                    payload: String::new(),
-                                    payload_raw: Vec::new(),
-                                });
-                            }
-                        }
-                        KeyCode::Char('s') => {
-                            if !app.show_detail {
-                                app.start();
-                            }
-                        }
-                        KeyCode::Char('S') => {
-                            if !app.show_detail {
-                                app.stop();
-                            }
-                        }
-                        _ => {}
+                    let should_exit = app.handle_key_event(key.code, page_size)?;
+                    if should_exit {
+                        return Ok(());
                     }
                 }
             }
