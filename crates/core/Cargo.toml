@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+# SPDX-License-Identifier: MIT
+[package]
+name = "zniff-rs-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+
+[dependencies]
+rusqlite = { version = "0.38.0", features = ["bundled", "rusqlite-macros"] }
