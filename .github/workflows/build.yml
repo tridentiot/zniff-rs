@@ -30,7 +30,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: zniff-rs-ubuntu
-          path: ./target/release/zniff-rs
+          path: |
+            ./target/release/zniff-rs-cli
+            ./target/release/zniff-rs-tui
+          if-no-files-found: error
 
   build-ubuntu-arm64:
     runs-on: ubuntu-24.04-arm
@@ -47,7 +50,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: zniff-rs-ubuntu-arm
-          path: ./target/release/zniff-rs
+          path: |
+            ./target/release/zniff-rs-cli
+            ./target/release/zniff-rs-tui
+          if-no-files-found: error
 
   build-windows:
     runs-on: windows-latest
@@ -58,7 +64,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: zniff-rs-windows
-          path: ./target/release/zniff-rs.exe
+          path: |
+            ./target/release/zniff-rs-cli.exe
+            ./target/release/zniff-rs-tui.exe
+          if-no-files-found: error
 
   build-macos:
     runs-on: macos-latest
@@ -69,4 +78,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: zniff-rs-macos
-          path: ./target/release/zniff-rs
+          path: |
+            ./target/release/zniff-rs-cli
+            ./target/release/zniff-rs-tui
+          if-no-files-found: error
