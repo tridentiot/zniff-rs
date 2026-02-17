@@ -10,17 +10,24 @@ and the project is still in its early days, but already with some basics working
 - Reading from a ZLF file
 - Parsing of Z-Wave frames
 - Run as a PTI server (`zniff-rs-cli server`) with the Z-Wave (PC) Zniffer as a client
+- Terminal User Interface (TUI)
 
 [Future functionality](https://github.com/tridentiot/zniff-rs/issues):
 - Decryption of S0 and S2 encrypted frames
 - GUI
-- TUI
 
 # Usage
 
+## CLI
 ```bash
-zniff-rs --help
+zniff-rs-cli --help
 ```
+
+## TUI
+```bash
+zniff-rs-tui
+```
+
 
 # Development
 
@@ -29,5 +36,5 @@ cargo build
 ```
 
 ```bash
-cargo run -- --help
+cargo run -p <zniff-rs-cli | zniff-rs-tui>
 ```
