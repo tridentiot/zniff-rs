@@ -1,5 +1,4 @@
-use crate::frame::{self, DecodedChunk, DecoderLibrary, MACFrame, FrameDecoder};
-
+use super::{DecodedChunk, DecoderLibrary, MACFrame, FrameDecoder};
 
 pub struct Decoder {
     frame_decoder : DecoderLibrary
@@ -10,14 +9,14 @@ pub struct Decoder {
 impl Decoder {
     pub fn new() -> Self {
         let mut frame_decoder = DecoderLibrary::new();
-        frame_decoder.register_decoder(Box::new( frame::ZnifferFrameDecoder {}));
-        frame_decoder.register_decoder(Box::new( frame::ZWaveFrameDecoder {}));
+        frame_decoder.register_decoder(Box::new( super::ZnifferFrameDecoder {}));
+        frame_decoder.register_decoder(Box::new( super::ZWaveFrameDecoder {}));
         Decoder { frame_decoder }
     }
 
     pub fn decode(&self, frame: &MACFrame) -> Option<DecodedChunk> {
         match frame.protocol {
-            frame::MACProtocol::ZWave => {
+            super::MACProtocol::ZWave => {
                 self.frame_decoder.decode("ZnifferFrameDecoder", frame, 0..frame.data.len())
             },
             ///TODO other protocols
@@ -30,7 +29,7 @@ impl Decoder {
 
 #[cfg(test)]
 mod test_decoder {
-    use crate::frame::MACProtocol;
+    use crate::decoder::MACProtocol;
 
     use super::*;
 

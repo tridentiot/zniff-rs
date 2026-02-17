@@ -1,4 +1,4 @@
-use crate::frame::{
+use crate::decoder::{
     DecodedChunk, DecodedField, DecoderLibrary, DisplayType, FieldType, MACFrame, FrameDecoder,
     Segment, field, zwave_frame_decoder,
 };
