@@ -25,6 +25,8 @@ jobs:
 
       - run: reuse lint
 
+      - run: cargo test
+
       - run: cargo build --release
 
       - uses: actions/upload-artifact@v4
