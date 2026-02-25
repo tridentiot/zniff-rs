@@ -21,9 +21,11 @@ jobs:
       - name: Install libudev
         run: |
           sudo apt update
-          sudo apt install -y libudev-dev reuse
+          sudo apt install --no-install-recommends -y libudev-dev reuse
 
       - run: reuse lint
+
+      - run: cargo test
 
       - run: cargo build --release
 
@@ -43,7 +45,7 @@ jobs:
       - name: Install libudev
         run: |
           sudo apt update
-          sudo apt install -y libudev-dev
+          sudo apt install --no-install-recommends -y libudev-dev
 
       - run: cargo build --release
 

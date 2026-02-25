@@ -12,7 +12,7 @@ use clap::{
 };
 use serialport::SerialPort;
 
-use crate::types::{
+use zniff_rs_core::types::{
     Frame,
     Region,
 };
@@ -20,10 +20,7 @@ mod zw_parser;
 use zw_parser::ZwParser;
 use zniff_rs_core::zlf;
 
-use crate::zniffer_parser::ParserResult;
-
-mod types;
-mod zniffer_parser;
+use zniff_rs_core::zniffer_parser;
 
 mod generator;
 use crate::generator::FrameGenerator;
@@ -123,26 +120,26 @@ impl Zniffer {
 
         self.port.write_all(&msg)?;
 
-        let mut buffer: Vec<u8> = vec![0; 128];
-        let mut response_length: usize = 0;
+        let mut value: u8 = 0;
         loop {
-            match self.port.read(buffer.as_mut_slice()) {
+            match self.port.read(std::slice::from_mut(&mut value)) {
                 Ok(bytes_read) => {
                     println!("Received {:?} bytes", bytes_read);
-                    for byte in &buffer[..bytes_read] {
-                        print!("0x{:02X} ", byte);
-                    }
+                    print!("0x{:02X} ", value);
                     println!();
-                    response_length = bytes_read;
-                    match self.parser.parse(buffer.clone()) {
-                        ParserResult::ValidCommand { id } => {
-                            println!("Got command ID {:?}", id);
+                    match self.parser.parse(value) {
+                        zniffer_parser::ParserResult::ValidCommand { id, payload } => {
+                            println!("Got command ID {:?} with payload {:?}", id, payload);
+                            return Ok(payload);
                         },
-                        ParserResult::ValidFrame { frame: _ } => {
+                        zniffer_parser::ParserResult::ValidFrame { frame: _ } => {
                             // This should not happen since we're expecting a response to Get Version.
                         },
-                        ParserResult::IncompleteFrame => {
+                        zniffer_parser::ParserResult::IncompleteFrame => {
                             // Continue parsing.
+                        },
+                        zniffer_parser::ParserResult::InvalidFrame => {
+                            println!("Invalid frame received.");
                         },
                     }
                 },
@@ -156,7 +153,7 @@ impl Zniffer {
                 }
             }
         }
-        Ok(buffer[0..response_length].to_vec())
+        Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "Timed out waiting for version response"))
     }
 
     fn set_region(&mut self) -> Result<(), std::io::Error>  {
@@ -211,22 +208,25 @@ impl Zniffer {
     }
 
     fn get_frames(&mut self) -> Result<Frame, bool> {
-        let mut buffer: Vec<u8> = vec![0; 128];
+        let mut value: u8 = 0;
         loop {
             // TODO: Do we need to read data from the serial port into a ring buffer to avoid
             // dropping frame 2 of 2 that might have been read from the serial port at once?
-            match self.port.read(buffer.as_mut_slice()) {
-                Ok(bytes_read) => {
-                    match self.parser.parse(buffer[..bytes_read].to_vec()) {
-                        ParserResult::ValidCommand { id: _ } => {
+            match self.port.read(std::slice::from_mut(&mut value)) {
+                Ok(_bytes_read) => {
+                    match self.parser.parse(value) {
+                        zniffer_parser::ParserResult::ValidCommand { id: _, payload: _ } => {
                             // This should not happen as we do not expect
                             // unsolicited commands from the zniffer device.
                         },
-                        ParserResult::ValidFrame { frame } => {
+                        zniffer_parser::ParserResult::ValidFrame { frame } => {
                             return Ok(frame);
                         },
-                        ParserResult::IncompleteFrame => {
+                        zniffer_parser::ParserResult::IncompleteFrame => {
                             // Continue parsing.
+                        },
+                        zniffer_parser::ParserResult::InvalidFrame => {
+                            println!("Invalid frame received.");
                         },
                     }
                 },
