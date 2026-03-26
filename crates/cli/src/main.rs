@@ -62,19 +62,25 @@ enum Commands {
 
     },
 
-    /// Converts a file from one format to another
+    /// Inspect a Z-Wave trace.
+    ///
+    /// Returns a summary of the contents of the trace, e.g., number of frames,
+    /// attachments, etc.
+    Inspect {
+        /// Input file, e.g., trace.zlf.
+        #[arg(short, long)]
+        trace: String,
+    },
+
+    /// Converts a trace from one format to another
     Convert {
-        /// Input file
+        /// Input file, e.g., trace.zlf.
         #[arg(short, long)]
         input: String,
 
-        /// Output file
+        /// Output file, e.g., trace.json.
         #[arg(short, long)]
         output: String,
-
-        /// Format to convert to
-        #[arg(short, long)]
-        format: String,
     },
 
     /// Runs a PTI server that listens for Zniffer frames and serves them over TCP.
@@ -445,9 +451,122 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         },
-        Commands::Convert { input, output, format } => {
-            println!("Converting '{}' to '{}' as format '{}'", input, output, format);
-            // Add conversion logic here
+        Commands::Inspect { trace } => {
+            println!("Inspecting trace '{}'", trace);
+
+            // Open the ZLF file
+            let file = std::fs::File::open(trace)?;
+            let mut reader = zlf::ZlfReader::new(file)?;
+
+            let mut attachment_counter = 0;
+            let mut data_frame_counter = 0;
+            let mut other_frame_counter = 0;
+
+            println!("Found:");
+
+            reader.read_frames(|record| {
+                match record {
+                    zlf::ZlfRecord::Attachment => {
+                        attachment_counter += 1;
+                    },
+                    zlf::ZlfRecord::Data(data_frame) => {
+                        data_frame_counter += 1;
+                    },
+                    zlf::ZlfRecord::Other(raw_frame) => {
+                        other_frame_counter += 1;
+                    },
+                }
+            })?;
+
+            println!("{} attachment record(s)", attachment_counter);
+            println!("{} data frame(s)", data_frame_counter);
+            println!("{} other frame(s)", other_frame_counter);
+
+            Ok(())
+        },
+        Commands::Convert { input, output } => {
+            println!("Converting '{}' to '{}'", input, output);
+
+            // Check the extension of the input file. For now, we only support
+            // ZLF as input and JSON as output.
+            let input_extension = std::path::Path::new(input)
+                .extension()
+                .and_then(std::ffi::OsStr::to_str)
+                .unwrap_or("")
+                .to_lowercase();
+
+            if input_extension != "zlf" {
+                eprintln!("Error: Only ZLF input files are currently supported");
+                return Err("Unsupported input file".into());
+            }
+
+            // Check the extension of the output file. For now, we only support JSON as output.
+            let output_extension = std::path::Path::new(output)
+                .extension()
+                .and_then(std::ffi::OsStr::to_str)
+                .unwrap_or("")
+                .to_lowercase();
+
+            if output_extension != "json" {
+                eprintln!("Error: Only JSON output files are currently supported");
+                return Err("Unsupported output file".into());
+            }
+
+            // Open the ZLF file
+            let file = std::fs::File::open(input)?;
+            let mut reader = zlf::ZlfReader::new(file)?;
+
+            // Collect raw Z-Wave frames (just the payloads)
+            let mut raw_frames: Vec<Frame> = Vec::new();
+
+            // We need the zniffer parser to parse the payload of each
+            // ZLF record.
+            let mut parser = zniffer_parser::Parser::new();
+
+            reader.read_frames(|record| {
+                match record {
+                    zlf::ZlfRecord::Other(raw_frame) => {
+                        for byte in raw_frame.payload.iter() {
+                            let result = parser.parse(*byte);
+
+                            match result {
+                                zniffer_parser::ParserResult::ValidFrame { frame } => {
+
+                                    raw_frames.push(frame.clone());
+                                    /*
+                                    let db_frame = DbFrame {
+                                        id: frame_id as i64, // You can generate or extract an ID for the frame
+                                        timestamp: frame.timestamp as i64, // You can extract this from the frame if needed
+                                        speed: frame.speed,     // You can extract this from the frame if needed
+                                        rssi: frame.rssi as i8,      // You can extract this from the frame if needed
+                                        channel: frame.channel,   // You can extract this from the frame if needed
+                                        home_id: 0x12345678, // Example home_id, replace with actual value if available
+                                        src_node_id: 1, // Example src_node_id, replace with actual value if available
+                                        dst_node_id: 2, // Example dst_node_id, replace with actual value if available
+                                        payload: frame.payload.clone(), // Use the raw payload from the parsed frame
+                                    };
+                                    */
+                                },
+                                _ => {
+                                    // Don't care about other parser results than a valid frame for now.
+                                },
+                            }
+                        }
+                    },
+                    _ => {
+                        // Ignore other frame types for now.
+                    }
+                }
+            })?;
+
+            // Serialize to JSON
+            let json = serde_json::to_string_pretty(&raw_frames)?;
+
+            // Write to output file
+            std::fs::write(output, json)?;
+
+            println!("Conversion complete. Wrote {} frames to {}", raw_frames.len(), output);
+
             Ok(())
         }
         Commands::Server { serial, region} => {
