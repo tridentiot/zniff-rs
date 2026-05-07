@@ -1,3 +1,5 @@
+use hex::{FromHex, FromHexError};
+
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
 use crate::frame_definition::{FrameDefinition};
@@ -5,6 +7,47 @@ use crate::xml::{
     ZwClasses,
     CmdClassCmdChild,
 };
+
+#[derive(Debug)]
+pub enum ZwParserError {
+    InvalidHexString { c: char, index: usize },
+    OddLength,
+    FrameTooShort,
+    FrameTooLong,
+    UnknownHeaderType,
+    UnknownCommandClass,
+    UnknownCommand,
+}
+
+impl core::fmt::Display for ZwParserError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ZwParserError::InvalidHexString { c, index } => write!(f, "Invalid hex string: {:?} at position {}", c, index),
+            ZwParserError::OddLength => write!(f, "Hex string has an odd length"),
+            ZwParserError::FrameTooShort => write!(f, "Frame too short"),
+            ZwParserError::FrameTooLong => write!(f, "Frame too long"),
+            ZwParserError::UnknownHeaderType => write!(f, "Unknown header type"),
+            ZwParserError::UnknownCommandClass => write!(f, "Unknown command class"),
+            ZwParserError::UnknownCommand => write!(f, "Unknown command"),
+        }
+    }
+}
+
+impl From<FromHexError> for ZwParserError {
+    fn from(err: FromHexError) -> Self {
+        match err {
+            FromHexError::InvalidHexCharacter { c, index } => {
+                ZwParserError::InvalidHexString { c, index }
+            },
+            FromHexError::OddLength => {
+                ZwParserError::OddLength
+            },
+            FromHexError::InvalidStringLength => {
+                ZwParserError::InvalidHexString { c: ' ', index: 0 }
+            },
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct ZwParser<'a> {
@@ -21,10 +64,12 @@ impl<'a> ZwParser<'a> {
     }
 
     /// Parse from text (hex), using the already-loaded config.
-    pub fn parse_str(&self, s: &str) {
+    pub fn parse_str(&self, s: &str) -> Result<(), ZwParserError> {
         let frame: Vec<u8> = match hex::decode(s) {
             Ok(f) => f,
-            Err(_) => panic!("Failed to decode hex string"),
+            Err(err) => {
+                return Err(ZwParserError::from(err));
+            },
         };
 
         println!("Frame: {}", hex::encode_upper(&frame));
@@ -41,6 +86,7 @@ impl<'a> ZwParser<'a> {
                         Err(_) => {
                             println!("Failed to parse key: {:?}", define.key);
                             panic!("Failed to parse key");
+                            //return Err(ZwParserError::UnknownHeaderType);
                         },
                     };
                     //println!("Key: {:?}, Header Type ID: {:?}", key, header_type_id);
@@ -128,7 +174,7 @@ impl<'a> ZwParser<'a> {
                 Ok(k) => k,
                 Err(_) => {
                     println!("Failed to parse key: {:?}", class.key);
-                    panic!("Failed to parse key");
+                    return Err(ZwParserError::UnknownCommandClass);
                 },
             };
             if cc == frame[0] {
@@ -145,7 +191,7 @@ impl<'a> ZwParser<'a> {
                                 Ok(k) => k,
                                 Err(_) => {
                                     println!("Failed to parse cmd key: {:?}", cmd.key);
-                                    panic!("Failed to parse cmd key");
+                                    return Err(ZwParserError::UnknownCommand);
                                 },
                             };
                             if cmd_id == frame[1] {
@@ -190,5 +236,38 @@ impl<'a> ZwParser<'a> {
                 };
             }
         }
+        Ok(())
+    }
+}
+
+// This section contains the unit tests.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frame_definition;
+    use crate::xml;
+
+    #[test]
+    fn test_parse_str() {
+        let fd = frame_definition::parse_xml();
+        let zwc = xml::parse_xml();
+        let zw_parser: ZwParser = ZwParser::new(&fd, &zwc);
+
+        // Validate successful parsing
+        let input = "E62E1DB102030F0B0170A1";
+        let result = zw_parser.parse_str(input);
+        assert!(result.is_ok(), "Parsing failed: {:?}", result.err());
+
+        // Validate odd length error
+        let input = "E62E1DB102030F0B0170A12";
+        let result = zw_parser.parse_str(input);
+        assert!(result.is_err(), "Parsing should have failed for odd length input");
+        assert!(matches!(result.as_ref().err(), Some(ZwParserError::OddLength)), "Expected OddLength error, got: {:?}", result.err());
+
+        // Validate invalid character error
+        let input = "E62E1DB102030F0B0170AG";
+        let result = zw_parser.parse_str(input);
+        assert!(result.is_err(), "Parsing should have failed for invalid character input");
+        assert!(matches!(result.as_ref().err(), Some(ZwParserError::InvalidHexString { c: 'G', index: 21 })), "Expected InvalidHexString error with character 'G' at index 22, got: {:?}", result.err());
     }
 }

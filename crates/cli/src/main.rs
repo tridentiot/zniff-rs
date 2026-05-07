@@ -41,6 +41,9 @@ use tokio::{
 #[command(name = "zniff-rs")]
 #[command(about = "zniff-rs is a tool for sniffing, parsing and converting Z-Wave data.", long_about = None)]
 struct Cli {
+    #[arg(long)]
+    json: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -459,7 +462,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let fd = frame_definition::parse_xml();
             let zwc = xml::parse_xml();
             let zw_parser: ZwParser = ZwParser::new(&fd, &zwc);
-            zw_parser.parse_str(&input);
+            let result = zw_parser.parse_str(&input);
+
+            if cli.json {
+                match result {
+                    Ok(_) => println!("{{\"status\": \"success\"}}"),
+                    Err(e) => println!("{{\"status\": \"error\", \"message\": \"{:?}\"}}", e),
+                }
+            } else {
+
+                match result {
+                    Ok(_) => println!("Parsing successful"),
+                    Err(e) => println!("Parsing failed: {:?}", e),
+                }
+            }
             Ok(())
         }
     }

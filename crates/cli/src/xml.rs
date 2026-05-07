@@ -437,6 +437,6 @@ pub fn parse_xml() -> ZwClasses {
             panic!("Failed to parse XML: {}", e);
         }
     };
-    println!("Parsed XML to struct: {:?}", zw_classes.cmd_class.len());
+//    println!("Parsed XML to struct: {:?}", zw_classes.cmd_class.len());
     zw_classes
 }
