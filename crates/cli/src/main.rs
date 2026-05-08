@@ -93,6 +93,10 @@ enum Commands {
 
     /// Parses a Z-Wave frame from a string input.
     Parse {
+        /// Z-Wave region e.g., US, EU, etc.
+        #[arg(long, value_parser = value_parser!(Region), required = true)]
+        region: Region,
+
         /// String representing the Z-Wave frame
         #[arg(long)]
         input: String,
@@ -458,11 +462,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run(serial.to_string(), region).await;
             Ok(())
         },
-        Commands::Parse { input } => {
+        Commands::Parse { input, region } => {
             let fd = frame_definition::parse_xml();
             let zwc = xml::parse_xml();
             let zw_parser: ZwParser = ZwParser::new(&fd, &zwc);
-            let result = zw_parser.parse_str(&input);
+            let result = zw_parser.parse_str(&region, &input);
 
             if cli.json {
                 match result {

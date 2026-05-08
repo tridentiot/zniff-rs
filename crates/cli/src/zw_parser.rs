@@ -1,4 +1,5 @@
 use hex::{FromHex, FromHexError};
+use zniff_rs_core::types::Region;
 
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
@@ -64,7 +65,7 @@ impl<'a> ZwParser<'a> {
     }
 
     /// Parse from text (hex), using the already-loaded config.
-    pub fn parse_str(&self, s: &str) -> Result<(), ZwParserError> {
+    pub fn parse_str(&self, region: &Region, s: &str) -> Result<(), ZwParserError> {
         let frame: Vec<u8> = match hex::decode(s) {
             Ok(f) => f,
             Err(err) => {
@@ -99,7 +100,11 @@ impl<'a> ZwParser<'a> {
             "Unknown".to_string()
         }
 
-        let key = "0"; // Classic Z-Wave frame header
+        let key: &str = match region {
+            Region::USLR | Region::EULR => "2", // Z-Wave LR frame header
+            _ => "0", // Default to classic Z-Wave for other regions
+        };
+        //let key = "0"; // Classic Z-Wave frame header
 
         let mut header_type = 0u8;
 
@@ -129,9 +134,12 @@ impl<'a> ZwParser<'a> {
                         let mut bit_offset = 0;
                         for sub_param in sub_params {
                             let n: usize = sub_param.bits.parse::<usize>().unwrap();
+
                             let sub_value = &value[0] >> bit_offset & ((1 << n) - 1);
                             println!("{} ({:?}): {:02X}", sub_param.name, sub_param.bits, sub_value);
                             bit_offset += n;
+                            // TODO: Increase a byte count to handle bit mask sizes that span multiple bytes.
+
 
                             // Save header type
                             if sub_param.name == "HeaderType" {
@@ -254,20 +262,29 @@ mod tests {
         let zw_parser: ZwParser = ZwParser::new(&fd, &zwc);
 
         // Validate successful parsing
+        let region: Region = Region::US;
         let input = "E62E1DB102030F0B0170A1";
-        let result = zw_parser.parse_str(input);
+        let result = zw_parser.parse_str(&region, input);
         assert!(result.is_ok(), "Parsing failed: {:?}", result.err());
 
         // Validate odd length error
+        let region: Region = Region::US;
         let input = "E62E1DB102030F0B0170A12";
-        let result = zw_parser.parse_str(input);
+        let result = zw_parser.parse_str(&region, input);
         assert!(result.is_err(), "Parsing should have failed for odd length input");
         assert!(matches!(result.as_ref().err(), Some(ZwParserError::OddLength)), "Expected OddLength error, got: {:?}", result.err());
 
         // Validate invalid character error
+        let region: Region = Region::US;
         let input = "E62E1DB102030F0B0170AG";
-        let result = zw_parser.parse_str(input);
+        let result = zw_parser.parse_str(&region, input);
         assert!(result.is_err(), "Parsing should have failed for invalid character input");
         assert!(matches!(result.as_ref().err(), Some(ZwParserError::InvalidHexString { c: 'G', index: 21 })), "Expected InvalidHexString error with character 'G' at index 22, got: {:?}", result.err());
+
+        // Validate a LR frame parsing
+        let region: Region = Region::USLR;
+        let input = "EDDFB4690011000F031297FAF0946B";
+        let result = zw_parser.parse_str(&region, input);
+        assert!(result.is_ok(), "Parsing failed for LR frame: {:?}", result.err());
     }
 }
