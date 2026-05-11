@@ -1,8 +1,7 @@
-use hex::{FromHex, FromHexError};
-use zniff_rs_core::types::Region;
-
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
+use hex::FromHexError;
+use zniff_rs_core::types::Region;
 use crate::frame_definition::{FrameDefinition};
 use crate::xml::{
     ZwClasses,
@@ -132,18 +131,26 @@ impl<'a> ZwParser<'a> {
                     },
                     Some(sub_params) => {
                         let mut bit_offset = 0;
+
+                        // Convert value bytes to a u64 for bit manipulation
+                        // Supports up to 64 bits (8 bytes)
+                        let mut combined_value: u64 = 0;
+                        for (i, &byte) in value.iter().enumerate() {
+                            if i < 8 {
+                                combined_value |= (byte as u64) << (i * 8);
+                            }
+                        }
+
                         for sub_param in sub_params {
                             let n: usize = sub_param.bits.parse::<usize>().unwrap();
 
-                            let sub_value = &value[0] >> bit_offset & ((1 << n) - 1);
-                            println!("{} ({:?}): {:02X}", sub_param.name, sub_param.bits, sub_value);
+                            let sub_value = (combined_value >> bit_offset) & ((1u64 << n) - 1);
+                            println!("{} ({:?}): 0x{:X}", sub_param.name, sub_param.bits, sub_value);
                             bit_offset += n;
-                            // TODO: Increase a byte count to handle bit mask sizes that span multiple bytes.
-
 
                             // Save header type
                             if sub_param.name == "HeaderType" {
-                                header_type = sub_value;
+                                header_type = sub_value as u8;
                             }
                         }
                     }
