@@ -22,9 +22,9 @@ pub enum ParserResult {
   InvalidFrame,
 }
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 enum ParserState {
+  #[default]
   AwaitStartOfFrame,
   AwaitCommandID,
   AwaitLength,
@@ -38,7 +38,7 @@ enum ParserState {
   AwaitStartofDataTwo,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Parser {
   state: ParserState,
   command_id: u8,
@@ -52,16 +52,7 @@ pub struct Parser {
 
 impl Parser {
   pub fn new() -> Self {
-    Parser {
-      state: ParserState::AwaitStartOfFrame,
-      command_id: 0,
-      length: 0,
-      payload_count: 0,
-      frame_type: 0,
-      timestamp_state: false,
-      rssi: 0,
-      frame: Frame::default()
-    }
+    Parser::default()
   }
 
   fn reset(&mut self) {
@@ -119,7 +110,7 @@ impl Parser {
           }
         },
         ParserState::AwaitTimestamp => {
-          if self.timestamp_state == false {
+          if !self.timestamp_state {
             self.frame.timestamp = (value as u16) << 8;
             self.timestamp_state = true;
           } else {
@@ -170,9 +161,8 @@ impl Parser {
           self.payload_count = self.length;
           if self.length == 0 {
             // No payload, so we can return the frame immediately.
-            let result: ParserResult;
             // TODO: Check for command vs. frame. Assuming command for now.
-            result = ParserResult::ValidCommand { id: self.command_id, payload: vec![] };
+            let result = ParserResult::ValidCommand { id: self.command_id, payload: vec![] };
             self.reset();
             return result;
           } else {
@@ -183,14 +173,13 @@ impl Parser {
           self.frame.payload.push(value);
           self.payload_count -= 1;
           if self.payload_count < 1 {
-            let result: ParserResult;
-            if matches!(self.frame_type, 1 | 2 | 4 | 5) {
+            let result: ParserResult = if matches!(self.frame_type, 1 | 2 | 4 | 5) {
               // Return a clone of the valid frame because this function
               // will continue parsing and overwrite self.frame.
-              result = ParserResult::ValidFrame { frame: self.frame.clone() };
+              ParserResult::ValidFrame { frame: self.frame.clone() }
             } else {
-              result = ParserResult::ValidCommand { id: self.command_id, payload: self.frame.payload.clone() };
-            }
+              ParserResult::ValidCommand { id: self.command_id, payload: self.frame.payload.clone() }
+            };
             self.reset();
             return result;
           }
