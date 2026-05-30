@@ -174,18 +174,17 @@ impl<R: Read + Seek> ZlfReader<R> {
         //}
         //println!();
 
-        self.frame_counter += 1;
-
         let mut api_type = [0u8; 1];
         self.r.read_exact(&mut api_type)?;
-        match ApiType::from(api_type[0]) {
-            ApiType::Attachment => { return Ok(Some(ZlfRecord::Attachment)); },
-            ApiType::Pti | ApiType::Zniffer => {
+        match ApiType::try_from(api_type[0]) {
+            Ok(ApiType::Attachment) => { return Ok(Some(ZlfRecord::Attachment)); },
+            Ok(ApiType::Pti) | Ok(ApiType::Zniffer) => {
+                self.frame_counter += 1;
                 // TODO: Do we need the frame type?
                 let frame_type = FrameType::Data;
                 Ok(Some(ZlfRecord::Other(RawFrame { timestamp: 0, sof: 0, frame_type, payload })))
             },
-            _ => { return Err(ZlfError::InvalidApiTypeField(api_type[0])); },
+            Err(_) => { return Err(ZlfError::InvalidApiTypeField(api_type[0])); },
         }
     }
 }
