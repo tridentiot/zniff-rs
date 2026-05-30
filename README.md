@@ -31,6 +31,13 @@ zniff-rs-tui
 
 # Development
 
+## Prerequisites:
+On Linux:
+```bash
+sudo apt install libudev-dev
+```
+
+## Build
 ```bash
 cargo build
 ```
