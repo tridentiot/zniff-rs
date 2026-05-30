@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 use std::fmt;
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Frame {
   pub region: Region,
   pub channel: u8,
@@ -14,7 +15,7 @@ pub struct Frame {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Default, Serialize, Deserialize)]
 pub enum Region {
     #[default]
     EU = 0,

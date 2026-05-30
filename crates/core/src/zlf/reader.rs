@@ -64,6 +64,7 @@ pub struct DataFrame {
 /// Either a decoded DATA_FRAME or a raw frame for other types.
 #[derive(Debug, Clone)]
 pub enum ZlfRecord {
+    Attachment,
     Data(DataFrame),
     Other(RawFrame),
 }
@@ -175,16 +176,15 @@ impl<R: Read + Seek> ZlfReader<R> {
 
         let mut api_type = [0u8; 1];
         self.r.read_exact(&mut api_type)?;
-        match ApiType::from(api_type[0]) {
-            ApiType::Unknown(_) => { return Err(ZlfError::InvalidApiTypeField(api_type[0])); },
-            _ => { },
+        match ApiType::try_from(api_type[0]) {
+            Ok(ApiType::Attachment) => { return Ok(Some(ZlfRecord::Attachment)); },
+            Ok(ApiType::Pti) | Ok(ApiType::Zniffer) => {
+                self.frame_counter += 1;
+                // TODO: Do we need the frame type?
+                let frame_type = FrameType::Data;
+                Ok(Some(ZlfRecord::Other(RawFrame { timestamp: 0, sof: 0, frame_type, payload })))
+            },
+            Err(_) => { return Err(ZlfError::InvalidApiTypeField(api_type[0])); },
         }
-
-        // TODO: Do we need the frame type?
-        let frame_type = FrameType::Data;
-
-        self.frame_counter += 1;
-
-        Ok(Some(ZlfRecord::Other(RawFrame { timestamp: 0, sof: 0, frame_type, payload })))
     }
 }

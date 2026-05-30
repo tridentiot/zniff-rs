@@ -50,6 +50,9 @@ impl FrameGenerator {
                     stream.write_all(&raw.payload)?;
                     std::thread::sleep(std::time::Duration::from_millis(self.delay as u64));
                 }
+                _ => {
+                    // Skip other records (e.g., attachments) for now.
+                }
             }
         }
         println!("End of file reached after {} frames", n);
