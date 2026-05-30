@@ -469,10 +469,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     zlf::ZlfRecord::Attachment => {
                         attachment_counter += 1;
                     },
-                    zlf::ZlfRecord::Data(data_frame) => {
+                    zlf::ZlfRecord::Data(_data_frame) => {
                         data_frame_counter += 1;
                     },
-                    zlf::ZlfRecord::Other(raw_frame) => {
+                    zlf::ZlfRecord::Other(_raw_frame) => {
                         other_frame_counter += 1;
                     },
                 }
@@ -532,7 +532,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             match result {
                                 zniffer_parser::ParserResult::ValidFrame { frame } => {
 
-                                    raw_frames.push(frame.clone());
+                                    raw_frames.push(frame);
                                     /*
                                     let db_frame = DbFrame {
                                         id: frame_id as i64, // You can generate or extract an ID for the frame
