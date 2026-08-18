@@ -10,6 +10,6 @@ readme.workspace = true
 
 [dependencies]
 crc16 = "0.4.0"
-rusqlite = { version = "0.38.0", features = ["bundled", "rusqlite-macros"] }
+rusqlite = { version = "0.40.2", features = ["bundled", "rusqlite-macros"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0.17"
