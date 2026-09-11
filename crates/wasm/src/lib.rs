@@ -274,6 +274,20 @@ impl Trace {
         Ok(Trace { cursor })
     }
 
+    /// Re-probe a trace that is still being captured.
+    ///
+    /// Returns the number of bytes now available, which grows while a capture
+    /// runs. In-memory traces never grow, so this is a no-op for them.
+    pub async fn poll_growth(&mut self) -> Result<f64, JsError> {
+        let len = match self.cursor.source_mut() {
+            Backing::Memory(b) => b.len() as u64,
+            Backing::Http(r) => {
+                r.refresh_len().await.map_err(|e| JsError::new(&format!("{e:?}")))?
+            },
+        };
+        Ok(len as f64)
+    }
+
     /// Size, time span and a rough frame count.
     pub async fn overview(&mut self) -> Result<JsValue, JsError> {
         let size = self.cursor.source().len();

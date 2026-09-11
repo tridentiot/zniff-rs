@@ -119,6 +119,40 @@ impl RangeSource {
         self.order.push(index);
     }
 
+    /// Re-probe the served length, for a trace that is still being captured.
+    ///
+    /// Also drops the block that held the old end of the file: it was cached
+    /// while partial, and would otherwise keep serving a short read forever.
+    pub async fn refresh_len(&mut self) -> Result<u64, JsValue> {
+        let probe = fetch_range(&self.url, 0, 1).await?;
+        let len = match probe.status() {
+            206 => content_range_total(&probe)
+                .ok_or_else(|| JsValue::from_str("no Content-Range on a 206 response"))?,
+            // A server that stops honouring ranges mid-capture cannot be
+            // followed safely; keep the length we already trust.
+            _ => return Ok(self.len),
+        };
+
+        self.grow_to(len);
+        Ok(self.len)
+    }
+
+    /// Adopt a new length, dropping the block that held the old end of file.
+    ///
+    /// That block was cached while the file was still being written, so it
+    /// holds a short read; keeping it would hide every byte appended since.
+    fn grow_to(&mut self, len: u64) {
+        if len <= self.len {
+            return;
+        }
+        let stale = self.len / BLOCK;
+        self.blocks.remove(&stale);
+        if let Some(at) = self.order.iter().position(|&i| i == stale) {
+            self.order.remove(at);
+        }
+        self.len = len;
+    }
+
     /// Fetch every block spanning `offset..offset + len`.
     ///
     /// The synchronous [`TraceSource`] cannot await, so callers prefetch the
@@ -198,4 +232,62 @@ async fn fetch_range(url: &str, start: u64, len: u64) -> Result<Response, JsValu
 fn content_range_total(response: &Response) -> Option<u64> {
     let value = response.headers().get("Content-Range").ok()??;
     value.rsplit('/').next()?.trim().parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `RangeSource` with a cached block, without touching the network.
+    fn source_with_blocks(len: u64, cached: &[u64]) -> RangeSource {
+        let mut source = RangeSource {
+            url: String::new(),
+            len,
+            blocks: HashMap::new(),
+            order: Vec::new(),
+        };
+        for &index in cached {
+            source.blocks.insert(index, vec![0u8; BLOCK as usize]);
+            source.order.push(index);
+        }
+        source
+    }
+
+    #[test]
+    fn growth_drops_the_partially_cached_final_block() {
+        // The file ended inside block 0, which was therefore cached short.
+        let mut source = source_with_blocks(1000, &[0]);
+        source.grow_to(2000);
+
+        assert_eq!(source.len, 2000);
+        assert!(!source.blocks.contains_key(&0), "the short block must be refetched");
+        assert!(!source.order.contains(&0), "and must leave the use order");
+    }
+
+    #[test]
+    fn growth_keeps_blocks_that_were_already_complete() {
+        // The file ended in block 2, so blocks 0 and 1 are complete.
+        let mut source = source_with_blocks(2 * BLOCK + 10, &[0, 1, 2]);
+        source.grow_to(3 * BLOCK);
+
+        assert!(source.blocks.contains_key(&0), "complete blocks stay cached");
+        assert!(source.blocks.contains_key(&1));
+        assert!(!source.blocks.contains_key(&2), "the final short block is dropped");
+    }
+
+    #[test]
+    fn a_trace_that_has_not_grown_is_left_alone() {
+        let mut source = source_with_blocks(1000, &[0]);
+        source.grow_to(1000);
+        assert_eq!(source.len, 1000);
+        assert!(source.blocks.contains_key(&0), "nothing to refetch");
+    }
+
+    #[test]
+    fn a_shrinking_length_is_ignored() {
+        // A truncated or re-created capture must not make reads go backwards.
+        let mut source = source_with_blocks(2000, &[0]);
+        source.grow_to(500);
+        assert_eq!(source.len, 2000);
+    }
 }
