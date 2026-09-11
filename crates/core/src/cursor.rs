@@ -73,6 +73,12 @@ pub struct FrameWindow {
     pub origins: Vec<(u64, usize)>,
     /// Record offset to pass back in to continue, or None at end of file.
     pub next_offset: Option<u64>,
+    /// Offset just past the last record consumed.
+    ///
+    /// Unlike `next_offset` this is set even at end of file, which is what
+    /// lets a still-growing capture resume exactly where it stopped instead
+    /// of re-reading the last window.
+    pub end_offset: u64,
 }
 
 /// Reads frames from a trace on demand.
@@ -301,6 +307,7 @@ impl<S: TraceSource> TraceCursor<S> {
                     frames: Vec::new(),
                     origins: Vec::new(),
                     next_offset: None,
+                    end_offset: offset,
                 });
             }
         };
@@ -329,7 +336,7 @@ impl<S: TraceSource> TraceCursor<S> {
             }
         }
 
-        Ok(FrameWindow { offset: start, frames, origins, next_offset })
+        Ok(FrameWindow { offset: start, frames, origins, next_offset, end_offset: at })
     }
 
     /// Decode `count` frames starting from the first one at or after `time_ms`.
@@ -345,6 +352,7 @@ impl<S: TraceSource> TraceCursor<S> {
                 frames: Vec::new(),
                 origins: Vec::new(),
                 next_offset: None,
+                end_offset: 0,
             }),
         }
     }

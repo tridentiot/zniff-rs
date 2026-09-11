@@ -192,8 +192,10 @@ struct Window {
     offset: f64,
     /// Record offset of the next window. Always present, null at the end
     /// of the trace, so a caller cannot mistake absent for "not finished".
-    /// Record offset of the next window, or null at end of file.
     next_offset: Option<f64>,
+    /// Offset just past the last record read. Set even at end of file, so a
+    /// growing capture can resume from exactly where it stopped.
+    end_offset: f64,
     rows: Vec<Row>,
 }
 
@@ -415,6 +417,7 @@ impl Trace {
                 frames: Vec::new(),
                 origins: Vec::new(),
                 next_offset: None,
+                end_offset: 0,
             }),
         }
     }
@@ -516,6 +519,7 @@ impl Trace {
         let result = Window {
             offset: window.offset as f64,
             next_offset: window.next_offset.map(|o| o as f64),
+            end_offset: window.end_offset as f64,
             rows,
         };
         to_js(&result)
@@ -602,6 +606,7 @@ impl Trace {
         let result = Window {
             offset: window.offset as f64,
             next_offset: window.next_offset.map(|o| o as f64),
+            end_offset: window.end_offset as f64,
             rows: rows_of(&window),
         };
         to_js(&result)
