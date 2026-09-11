@@ -84,3 +84,54 @@ jobs:
             ./target/release/zniff-rs-cli
             ./target/release/zniff-rs-tui
           if-no-files-found: error
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install libudev
+        run: |
+          sudo apt update
+          sudo apt install --no-install-recommends -y libudev-dev
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the trace viewer
+        working-directory: web
+        run: |
+          npm ci
+          npm run build:wasm
+          npx tsc --noEmit
+          npx vite build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: zniff-rs-web
+          path: ./web/dist
+          if-no-files-found: error
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: ./web/dist
+
+  deploy-web:
+    needs: build-web
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
