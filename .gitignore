@@ -8,7 +8,3 @@ Cargo.lock
 # Legacy Python 2 codegen scripts, superseded by the Rust XML decoders.
 cmdclass_xml2c.py
 xml2c_decoder.py
-
-# Test traces are supplied locally; see fixtures/README.md.
-crates/core/tests/fixtures/*.zlf
-crates/core/tests/fixtures/*.oracle.txt

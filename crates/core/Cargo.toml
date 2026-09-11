@@ -12,10 +12,6 @@ readme.workspace = true
 default = ["storage"]
 # SQLite-backed frame storage. Not available on wasm32 (bundled SQLite is C).
 storage = ["dep:rusqlite"]
-# Tests that read a real capture. The traces are not in the repository,
-# since a capture carries the home ids, node ids and key exchange of the
-# network it was taken from. See crates/core/tests/fixtures/README.md.
-fixtures = []
 
 [dependencies]
 crc16 = "0.4.0"
