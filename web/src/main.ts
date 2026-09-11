@@ -36,6 +36,7 @@ interface Field {
 interface Window_ {
   offset: number;
   next_offset: number | null;
+  end_offset: number;
   rows: Row[];
 }
 
@@ -221,6 +222,19 @@ let rows: Row[] = [];
 let windowOffset = 0;
 /** Record offset of the window after the last one loaded, or null at EOF. */
 let nextOffset: number | null = null;
+
+/**
+ * Live capture state.
+ *
+ * A trace that is still being captured keeps growing, so reaching its end is
+ * not final: `tailOffset` remembers where reading stopped, and polling resumes
+ * from there once the file grows. Only set for a `?live=1` session, so an
+ * ordinary static trace behaves exactly as before.
+ */
+let live: { timer: number; size: number } | null = null;
+
+/** Where to resume from after the trace grows, set when EOF is reached. */
+let tailOffset: number | null = null;
 /** Set while a window is loading, so scrolling cannot re-enter. */
 let paging = false;
 
@@ -304,8 +318,11 @@ function updateStatus(): void {
   // A count is exact only when the whole trace was read; otherwise it is
   // extrapolated, and saying so avoids "181 shown of ~175".
   const count = Math.round(overview.estimated_frames).toLocaleString();
+  // While capturing, the end of the file is only the end *so far*.
+  const capturing = live ? " · capturing" : "";
   if (overview.frames_exact) {
-    els.status.textContent = `${rows.length.toLocaleString()} frames`;
+    els.status.textContent =
+      `${rows.length.toLocaleString()} frames${capturing}`;
     return;
   }
 
@@ -315,9 +332,10 @@ function updateStatus(): void {
   const pct = overview.size
     ? Math.min(100, Math.round((100 * reached) / overview.size))
     : 0;
-  const end = nextOffset === null ? " · end of trace" : "";
+  const end = nextOffset === null && !live ? " · end of trace" : "";
   els.status.textContent =
-    `${rows.length.toLocaleString()} loaded · ~${count} in trace · ${pct}% through${end}`;
+    `${rows.length.toLocaleString()} loaded · ~${count} in trace · ` +
+    `${pct}% through${end}${capturing}`;
 }
 
 /** Load the window starting at a record offset. */
@@ -330,6 +348,7 @@ async function showWindow(offset: number): Promise<void> {
   rows = w.rows;
   windowOffset = w.offset;
   nextOffset = w.next_offset ?? null;
+  if (nextOffset === null) tailOffset = w.end_offset;
   selected = -1;
   renderRows();
   clearDetail();
@@ -355,6 +374,9 @@ async function appendNext(): Promise<void> {
 
     rows = rows.concat(w.rows);
     nextOffset = w.next_offset ?? null;
+    // Remember where the trace ran out, so a live capture picks up after the
+    // last record read rather than re-reading the final window.
+    if (nextOffset === null) tailOffset = w.end_offset;
 
     let dropped = 0;
     if (rows.length > MAX_ROWS) {
@@ -374,6 +396,52 @@ async function appendNext(): Promise<void> {
   } finally {
     paging = false;
   }
+}
+
+/**
+ * Follow a capture that is still running.
+ *
+ * The viewer learns a trace's length once, when it opens, so a growing file
+ * is invisible until the length is re-probed. Polling does that, and only
+ * appends when the trace has actually grown, so a quiet radio costs one small
+ * request per interval and changes nothing on screen.
+ */
+function startLiveTail(): void {
+  if (live) return;
+  const POLL_MS = 1000;
+  const timer = window.setInterval(async () => {
+    if (!trace || !live || paging) return;
+    let size: number;
+    try {
+      size = await trace.poll_growth();
+    } catch {
+      // A capture that has finished stops answering; leave the rows in place.
+      return;
+    }
+    if (size <= live.size) return;
+    live.size = size;
+
+    // Reaching the end of a growing trace is not final: resume from the
+    // record boundary where reading stopped.
+    if (nextOffset === null && tailOffset !== null) {
+      nextOffset = tailOffset;
+      tailOffset = null;
+    }
+    // Only pull new rows in when the view is already at the bottom, so
+    // reading back through the trace is not interrupted.
+    const atBottom =
+      els.list.scrollTop + els.list.clientHeight >= els.list.scrollHeight - rowHeight * 2;
+    if (atBottom) await appendNext();
+    updateStatus();
+  }, POLL_MS);
+  live = { timer, size: 0 };
+}
+
+/** Stop following a capture. */
+function stopLiveTail(): void {
+  if (!live) return;
+  window.clearInterval(live.timer);
+  live = null;
 }
 
 /**
@@ -490,6 +558,7 @@ async function showTime(timeMs: number): Promise<void> {
   rows = w.rows;
   windowOffset = w.offset;
   nextOffset = w.next_offset ?? null;
+  if (nextOffset === null) tailOffset = w.end_offset;
   ahead = null;
   selected = -1;
   renderRows();
@@ -664,6 +733,10 @@ async function applyFilter(): Promise<void> {
 
 async function load(open: () => Promise<Trace> | Trace, label: string): Promise<void> {
   els.status.textContent = `Opening ${label}…`;
+  // Dropping a file while following a capture must not leave the old poll
+  // running against the new trace.
+  stopLiveTail();
+  tailOffset = null;
   try {
     trace = await open();
     overview = (await trace.overview()) as Overview;
@@ -781,6 +854,8 @@ async function main(): Promise<void> {
   const url = params.get("trace") ?? params.get("url");
   if (url) {
     await load(() => Trace.open_url(url), url);
+    // A capture served by `zniff-serve` is still growing; follow it.
+    if (params.get("live") === "1" && trace) startLiveTail();
   }
 }
 
