@@ -2,11 +2,8 @@
 // SPDX-License-Identifier: MIT
 //! Checks against a real capture and the C# reference decoder.
 //!
-//! A capture carries the home ids, node ids and key exchange of the
-//! network it was taken from, so no trace is kept in the repository.
-//! Put one in place and enable the `fixtures` feature to run these:
-//! see `fixtures/README.md`.
-#![cfg(feature = "fixtures")]
+//! The trace is a SmartStart inclusion recorded on a test network; see
+//! `fixtures/README.md` for how the reference baseline is generated.
 
 use std::io::Cursor;
 

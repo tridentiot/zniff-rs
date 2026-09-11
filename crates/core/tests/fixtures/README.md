@@ -4,32 +4,34 @@ SPDX-License-Identifier: MIT
 -->
 # Test traces
 
-The tests that read a real capture are behind the `fixtures` feature, and
-the traces themselves are not in the repository: a capture carries the
-home ids, node ids and security key exchange of whatever network it was
-taken from, which is not something to publish with the source.
-
-To run them, put a trace here and enable the feature:
-
-```bash
-cp your-capture.zlf crates/core/tests/fixtures/pti-800.zlf
-cargo test -p zniff-rs-core --features fixtures
-```
+`pti-800.zlf` is a 181-frame SmartStart inclusion captured from an
+800-series device on a test network: explorer frames, singlecasts, acks
+and an S2 key exchange, at 40 and 100 kbps on channels 0 and 1.
 
 ## The reference baseline
 
-`pti_fixture.rs` compares the decoder against the C# Zniffer, so it also
-needs that tool's output for the same trace. `ZlfDump` in
+`pti-800.oracle.txt` is the same trace decoded by the C# Zniffer, and
+`pti_fixture.rs` asserts the Rust decoders agree with it on header type,
+source node, sequence number, ack flag, CRC, channel, speed, region and
+RSSI. It is the check that the port still matches the implementation it
+came from.
+
+`ZlfDump` in
 [z-wave-tools-core](https://github.com/tridentiot/z-wave-tools-core) is a
-headless build of the reference decoder:
+headless build of that decoder. To regenerate the baseline, or to make
+one for another trace:
 
 ```bash
-dotnet run --project ZlfDump -- your-capture.zlf --brief \
-  | grep '^#' > crates/core/tests/fixtures/pti-800.oracle.txt
+dotnet run --project ZlfDump -- pti-800.zlf --brief \
+  | grep '^#' > pti-800.oracle.txt
 ```
 
-The comparison covers header type, source node, sequence number, ack flag,
-CRC, channel, speed, region and RSSI. It is the check that the Rust
-decoders agree with the implementation they were ported from, so it is
-worth running against any capture that exercises a frame type the unit
-tests do not: Long Range, multicast, beams, or the legacy Zniffer dialect.
+## What is not covered
+
+This capture is PTI only, one region, and mostly singlecast and ack. The
+legacy Zniffer dialect, Long Range, multicast and wake-up beams are
+exercised by unit tests alone. A capture containing any of those would
+be worth adding here, with its baseline.
+
+Only commit a trace from a test network: a capture carries the home ids,
+node ids and key exchange of whatever network it was taken from.

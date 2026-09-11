@@ -423,9 +423,7 @@ impl<S: TraceSource> TraceCursor<S> {
     }
 }
 
-// These tests read a real capture, which is not in the repository.
-// Enable the `fixtures` feature with a trace in place to run them.
-#[cfg(all(test, feature = "fixtures"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::source::SliceSource;
