@@ -93,6 +93,17 @@ impl TraceFrame {
         self.header.as_ref().map(|h| h.header_key)
     }
 
+    /// True when this frame is a singlecast, routed or not.
+    ///
+    /// Only a singlecast is acknowledged, and so only a singlecast is
+    /// retransmitted: G.9959 8.1.5.1.4.2 has the ACK request subfield
+    /// ignored on every other MPDU type. The keys are the SINGLECAST,
+    /// SINGLECAST24, SINGLECASTLR, ROUTED_SINGLECAST and
+    /// ROUTED_SINGLECAST24 headers of FrameDefinition.xml.
+    pub fn is_singlecast(&self) -> bool {
+        matches!(self.header_key(), Some(13 | 14 | 70 | 22 | 23))
+    }
+
     /// True when this frame is a wake-up beam.
     pub fn is_beam(&self) -> bool {
         matches!(self.header_key(), Some(60..=63)) || self.beam_count.is_some()

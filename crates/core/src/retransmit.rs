@@ -11,6 +11,12 @@
 //! and a sender that has moved on has sent something new. Only the last
 //! value each sender used matters, which makes this a small amount of
 //! state and independent of timing.
+//!
+//! This applies to singlecasts alone. Only a singlecast is acknowledged,
+//! so only a singlecast is retransmitted — G.9959 8.1.5.1.4.2 has the ACK
+//! request subfield ignored on every other MPDU type. Explorer frames and
+//! broadcasts reuse sequence numbers freely, and reading those as retries
+//! is simply wrong.
 use std::collections::HashMap;
 
 use crate::trace::TraceFrame;
@@ -68,10 +74,14 @@ impl RetransmitTracker {
 
     /// Classify the next frame, which sits at `id`.
     ///
-    /// Frames that carry no sender or sequence number — beams, and
-    /// anything whose header did not decode — are never flagged, and do
-    /// not disturb what is known about a sender.
+    /// Only singlecasts are considered. Anything else — an explorer frame,
+    /// a broadcast, a beam, or a frame whose header did not decode — is
+    /// never flagged and leaves no trace in what is known about a sender.
     pub fn observe(&mut self, frame: &TraceFrame, id: FrameId) -> Retransmission {
+        if !frame.is_singlecast() {
+            return Retransmission::default();
+        }
+
         let (Some(home_id), Some(source), Some(sequence)) =
             (frame.home_id(), frame.source(), frame.sequence_number())
         else {
@@ -117,6 +127,7 @@ mod tests {
     use crate::pti::Direction;
 
     /// A frame carrying just the fields retransmission detection reads.
+    /// A singlecast carrying just the fields detection reads.
     fn frame(
         time_ms: i64,
         home: u32,
@@ -124,6 +135,19 @@ mod tests {
         dst: u64,
         seq: u64,
         is_ack: bool,
+    ) -> TraceFrame {
+        frame_typed(time_ms, home, src, dst, seq, is_ack, None)
+    }
+
+    /// The same, with a chosen header type.
+    fn frame_typed(
+        time_ms: i64,
+        home: u32,
+        src: u64,
+        dst: u64,
+        seq: u64,
+        is_ack: bool,
+        header_key: Option<u8>,
     ) -> TraceFrame {
         fn param(name: &str, value: u64) -> DecodedParam {
             use crate::decoder::frame_definition::{
@@ -157,7 +181,7 @@ mod tests {
             beam_count: None,
             mpdu: Vec::new(),
             header: Some(DecodedHeader {
-                header_key: if is_ack { 19 } else { 13 },
+                header_key: header_key.unwrap_or(if is_ack { 19 } else { 13 }),
                 header_name: String::new(),
                 header_text: String::new(),
                 is_ack,
@@ -213,6 +237,40 @@ mod tests {
         // A retry of the second frame points at the second, not the first.
         let retry = t.observe(&frame(20, 1, 1, 2, 6, false), (300, 0));
         assert_eq!(retry.original, Some((200, 0)));
+    }
+
+    #[test]
+    fn only_singlecasts_are_considered() {
+        // Explorer frames and broadcasts reuse sequence numbers freely,
+        // and only a singlecast is acknowledged and therefore retried.
+        for key in [10u8, 16, 31, 33, 37, 60] {
+            let mut t = RetransmitTracker::new();
+            t.observe(&frame_typed(0, 1, 1, 2, 5, false, Some(key)), (0, 0));
+            let repeat =
+                t.observe(&frame_typed(10, 1, 1, 2, 5, false, Some(key)), (1, 0));
+            assert_eq!(repeat.attempt, 0, "header {key} should not be flagged");
+        }
+    }
+
+    #[test]
+    fn every_singlecast_variant_is_considered() {
+        // SINGLECAST, SINGLECAST24, routed, and Long Range.
+        for key in [13u8, 14, 22, 23, 70] {
+            let mut t = RetransmitTracker::new();
+            t.observe(&frame_typed(0, 1, 1, 2, 5, false, Some(key)), (0, 0));
+            let repeat =
+                t.observe(&frame_typed(10, 1, 1, 2, 5, false, Some(key)), (1, 0));
+            assert_eq!(repeat.attempt, 1, "header {key} is a singlecast");
+        }
+    }
+
+    #[test]
+    fn a_broadcast_between_retries_does_not_disturb_them() {
+        // Anything that is not a singlecast leaves no state behind.
+        let mut t = RetransmitTracker::new();
+        t.observe(&frame(0, 1, 1, 2, 5, false), (0, 0));
+        t.observe(&frame_typed(5, 1, 1, 255, 9, false, Some(10)), (1, 0));
+        assert_eq!(t.observe(&frame(10, 1, 1, 2, 5, false), (2, 0)).attempt, 1);
     }
 
     #[test]

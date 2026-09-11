@@ -93,13 +93,18 @@ A frame the sender repeated because no acknowledgement arrived is marked
 pane says which attempt it is and links back to the first transmission,
 loading that part of the trace if it is no longer on screen.
 
-G.9959 (01/2015) 8.1.3.3.7 requires a node to keep the same sequence
-number across an initial transmission and all its retransmissions, and to
-advance it for each new one. So the last sequence number each sender used
-is tracked, per home id and source node, and a sender repeating that
-value is retrying. Timing plays no part, and neither does the
-destination: a sender advances its sequence number per MPDU whoever it
-is addressed to.
+Only singlecasts are considered, routed ones included: a singlecast is
+the only MPDU that is acknowledged, and so the only one that is
+retransmitted (G.9959 8.1.5.1.4.2). Explorer frames and broadcasts reuse
+sequence numbers freely.
+
+G.9959 8.1.3.3.7 requires a node to keep the same sequence number across
+an initial transmission and all its retransmissions, and to advance it
+for each new one. So the last sequence number each sender used is
+tracked, per home id and source node, and a sender repeating that value
+is retrying. Timing plays no part, and neither does the destination: a
+sender advances its sequence number per MPDU whoever it is addressed
+to.
 
 ### Colours
 
