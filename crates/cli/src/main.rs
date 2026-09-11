@@ -23,6 +23,7 @@ use zniff_rs_core::zlf;
 use zniff_rs_core::zniffer_parser;
 
 mod generator;
+
 use crate::generator::FrameGenerator;
 
 use tokio::{
@@ -458,29 +459,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let file = std::fs::File::open(trace)?;
             let mut reader = zlf::ZlfReader::new(file)?;
 
-            let mut attachment_counter = 0;
-            let mut data_frame_counter = 0;
-            let mut other_frame_counter = 0;
+            let mut counts: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            let mut first_last: Option<(i64, i64)> = None;
 
-            println!("Found:");
-
-            reader.read_frames(|record| {
-                match record {
-                    zlf::ZlfRecord::Attachment => {
-                        attachment_counter += 1;
-                    },
-                    zlf::ZlfRecord::Data(_data_frame) => {
-                        data_frame_counter += 1;
-                    },
-                    zlf::ZlfRecord::Other(_raw_frame) => {
-                        other_frame_counter += 1;
-                    },
-                }
+            reader.read_records(|record| {
+                *counts.entry(format!("{:?}", record.api_type)).or_default() += 1;
+                let ms = record.timestamp.unix_millis();
+                first_last = Some(match first_last {
+                    None => (ms, ms),
+                    Some((f, l)) => (f.min(ms), l.max(ms)),
+                });
             })?;
 
-            println!("{} attachment record(s)", attachment_counter);
-            println!("{} data frame(s)", data_frame_counter);
-            println!("{} other frame(s)", other_frame_counter);
+            println!("Found:");
+            for (api_type, count) in &counts {
+                println!("  {count} {api_type} record(s)");
+            }
+            println!("{} record(s) total", reader.record_count());
+            if let Some((first, last)) = first_last {
+                println!("Spanning {} ms", last - first);
+            }
 
             Ok(())
         },
@@ -523,38 +522,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // ZLF record.
             let mut parser = zniffer_parser::Parser::new();
 
-            reader.read_frames(|record| {
-                match record {
-                    zlf::ZlfRecord::Other(raw_frame) => {
-                        for byte in raw_frame.payload.iter() {
-                            let result = parser.parse(*byte);
-
-                            match result {
-                                zniffer_parser::ParserResult::ValidFrame { frame } => {
-
-                                    raw_frames.push(frame);
-                                    /*
-                                    let db_frame = DbFrame {
-                                        id: frame_id as i64, // You can generate or extract an ID for the frame
-                                        timestamp: frame.timestamp as i64, // You can extract this from the frame if needed
-                                        speed: frame.speed,     // You can extract this from the frame if needed
-                                        rssi: frame.rssi as i8,      // You can extract this from the frame if needed
-                                        channel: frame.channel,   // You can extract this from the frame if needed
-                                        home_id: 0x12345678, // Example home_id, replace with actual value if available
-                                        src_node_id: 1, // Example src_node_id, replace with actual value if available
-                                        dst_node_id: 2, // Example dst_node_id, replace with actual value if available
-                                        payload: frame.payload.clone(), // Use the raw payload from the parsed frame
-                                    };
-                                    */
-                                },
-                                _ => {
-                                    // Don't care about other parser results than a valid frame for now.
-                                },
-                            }
-                        }
-                    },
-                    _ => {
-                        // Ignore other frame types for now.
+            reader.read_records(|record| {
+                if record.api_type == zlf::ApiType::Attachment {
+                    return;
+                }
+                for byte in record.payload.iter() {
+                    if let zniffer_parser::ParserResult::ValidFrame { frame } = parser.parse(*byte)
+                    {
+                        raw_frames.push(frame);
                     }
                 }
             })?;

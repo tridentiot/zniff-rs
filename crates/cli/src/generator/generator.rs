@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
 use std::fs::File;
-use crate::zlf::{
+use zniff_rs_core::zlf::{
+    ApiType,
     ZlfReader,
-    ZlfRecord,
 };
 use std::net::{
     TcpListener,
@@ -32,31 +32,26 @@ impl FrameGenerator {
         println!("Client connected from {addr}");
 
         let mut n = 0usize;
-        while let Some(rec) = reader.next()? {
+        while let Some(rec) = reader.next_record()? {
             n += 1;
-            match rec {
-                ZlfRecord::Data(df) => {
-                    println!(
-                        "#{:06} DATA ts={} ch/s={} region={} rssi={} mpdu_len={}",
-                        n, df.timestamp, df.ch_and_speed, df.region, df.rssi, df.mpdu.len()
-                    );
-                    // … further MPDU parsing here …
-                }
-                ZlfRecord::Other(raw) => {
-                    println!(
-                        "#{:06} {:?} sof='{}' len={}",
-                        n, raw.frame_type, raw.sof as char, raw.payload.len()
-                    );
-                    stream.write_all(&raw.payload)?;
-                    std::thread::sleep(std::time::Duration::from_millis(self.delay as u64));
+            match rec.api_type {
+                ApiType::Attachment => {
+                    // Attachments carry keys/comments, not frames.
                 }
                 _ => {
-                    // Skip other records (e.g., attachments) for now.
+                    println!(
+                        "#{:06} {:?} len={}",
+                        n,
+                        rec.api_type,
+                        rec.payload.len()
+                    );
+                    stream.write_all(&rec.payload)?;
+                    std::thread::sleep(std::time::Duration::from_millis(self.delay as u64));
                 }
             }
         }
         println!("End of file reached after {} frames", n);
-        println!("Total frames read: {}", reader.frame_count());
+        println!("Total frames read: {}", reader.record_count());
         Ok(())
     }
 }
