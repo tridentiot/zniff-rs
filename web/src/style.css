@@ -1,0 +1,554 @@
+/*
+SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+SPDX-License-Identifier: MIT
+*/
+
+/* Palette and typography follow tridentiot.com: navy #15244F for chrome and
+   headings, #2EA3F2 for links and accents, Source Sans Pro for text. */
+:root {
+  --navy: #15244f;
+  --navy-tint: #22376f;
+  --blue: #2ea3f2;
+  --blue-deep: #0c8dc6;
+
+  --bg: #ffffff;
+  --surface: #f7f9fc;
+  --fg: #333333;
+  --muted: #6b7280;
+  --line: #dfe5ee;
+
+  --header-bg: var(--navy);
+  --header-fg: #ffffff;
+  --accent: var(--blue-deep);
+  --hover: #e4f0fb;
+  --selected: #d6ebfb;
+  --bad: #cf2e2e;
+
+  --sans: "Source Sans 3", "Source Sans Pro", Helvetica, Arial, Lucida, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1729;
+    --surface: #16203a;
+    --fg: #e8ecf4;
+    --muted: #9aa6bd;
+    --line: #27324d;
+
+    --header-bg: #0b1224;
+    --accent: var(--blue);
+    --hover: #1a2a49;
+    --selected: #1d3459;
+    --bad: #ff7b6b;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font: 14px/1.5 var(--sans);
+  color: var(--fg);
+  background: var(--bg);
+}
+
+/* Header: the navy band that carries the brand. */
+header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 0 18px;
+  height: 56px;
+  flex: none;
+  background: var(--header-bg);
+  color: var(--header-fg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.brand .mark {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #fff;
+}
+
+.brand .mark em {
+  font-style: normal;
+  color: var(--blue);
+}
+
+h1 {
+  font-size: 14px;
+  font-weight: 400;
+  margin: 0;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+}
+
+h1::before {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  margin-right: 10px;
+  vertical-align: -2px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+#filter {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  font: 13px/1 var(--mono);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+}
+
+#filter::placeholder { color: rgba(255, 255, 255, 0.45); }
+
+#filter:focus {
+  outline: none;
+  border-color: var(--blue);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#filter:disabled { opacity: 0.45; }
+
+.goto {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.goto input {
+  height: 30px;
+  padding: 0 6px;
+  font: inherit;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color-scheme: dark;
+}
+
+.goto input:disabled { opacity: 0.45; }
+
+#status {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* Header button, matching the filter field it sits beside. */
+#info-toggle {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#info-toggle:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
+#info-toggle:disabled { opacity: 0.45; cursor: default; }
+#info-toggle[aria-expanded="true"] {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+/* Trace information, folded out below the header. */
+.info {
+  flex: none;
+  padding: 14px 18px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px 28px;
+}
+
+.info dl { margin: 0; }
+
+.info dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.info dd {
+  margin: 0 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.info .wrap { word-break: break-all; }
+.info .approx { color: var(--muted); }
+
+/* Drop target shown before a trace is loaded. */
+.drop {
+  margin: auto;
+  padding: 52px 72px;
+  text-align: center;
+  background: var(--surface);
+  border: 2px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+.drop.over {
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+  color: var(--fg);
+}
+
+.drop p { margin: 6px 0; }
+
+.drop strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--navy);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .drop strong { color: var(--fg); }
+}
+
+.hint { font-size: 13px; color: var(--muted); }
+.drop code {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
+}
+
+.link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+#viewer { display: flex; flex: 1; min-height: 0; width: 100%; }
+
+/* The list and its legend share the space left by the detail pane. */
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+/* Frame-type key, in the same colours as the rows. */
+.legend {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: #f7f9fc;
+  border-top: 1px solid #dfe5ee;
+  color: #6b7280;
+  color-scheme: light;
+}
+
+.legend span::before {
+  content: "\25A0";
+  margin-right: 4px;
+}
+
+.list {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  /* The frame colours are tuned for a light ground, so the list keeps its
+     light palette even under a dark system theme. */
+  color-scheme: light;
+  background: #ffffff;
+  --line: #dfe5ee;
+  --muted: #6b7280;
+  --surface: #f7f9fc;
+  /* Tint mixed into a row to darken it; ROW_SHADE in color.rs. */
+  --row-shade: #15244f;
+}
+
+/* Fixed layout so the <col> widths are authoritative and a wide Application
+   column can scroll rather than squeezing the rest. */
+table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+}
+
+thead th {
+  /* Sticky positions the cell, which the resize handle anchors to. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 7px 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface);
+  border-bottom: 2px solid var(--line);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 4px 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Drag to resize a column; double-click to restore its default width. */
+.resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.resizer::after {
+  content: "";
+  position: absolute;
+  top: 25%;
+  right: 4px;
+  width: 1px;
+  height: 50%;
+  background: var(--line);
+}
+
+.resizer:hover::after,
+body.resizing .resizer::after {
+  top: 0;
+  height: 100%;
+  width: 2px;
+  right: 3px;
+  background: var(--blue);
+}
+
+/* Keep the resize cursor while dragging, even outside the handle. */
+body.resizing { cursor: col-resize; user-select: none; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A frame the sender repeated because no acknowledgement arrived. */
+.tag {
+  display: inline-block;
+  padding: 0 4px;
+  margin-right: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  vertical-align: 1px;
+  color: #fff;
+  background: var(--frame-warn, #A0522D);
+  border-radius: 3px;
+}
+
+tbody tr.retx { box-shadow: inset 2px 0 0 #A0522D; }
+
+/* The desktop Zniffer shows the raw frame in a monospace face. */
+td.hex { font-family: var(--mono); font-size: 12px; }
+
+tbody tr { cursor: pointer; }
+
+/* Text colour by frame type and background by bit rate, both supplied per
+   row as --frame-fg/--frame-bg, matching the desktop Zniffer.
+
+   These colours assume a light ground, so the list keeps its light palette
+   in dark mode; inverting it would misrepresent the frame types. */
+tbody tr {
+  color: var(--frame-fg, inherit);
+  background: var(--frame-bg, transparent);
+}
+
+/* Alternating rows darken the bit-rate background; the selected row darkens
+   it further still. The mix amounts match STRIPE_MIX and SELECTED_MIX in
+   crates/wasm/src/color.rs, where a test checks the frame colours stay
+   above 4.5:1 on all three tiers.
+
+   The stripe is a class rather than :nth-child because the rendered window
+   slides over the trace, so a row's parity in the DOM is not its parity in
+   the file and the stripes would flicker while paging. */
+tbody tr.stripe:not(.selected) {
+  background: color-mix(in srgb, var(--row-shade) 6%, var(--frame-bg, #fff));
+}
+
+/* Hover is an edge only, so it never competes with the selected row. */
+tbody tr:hover:not(.selected) {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--blue) 55%, transparent);
+}
+
+tbody tr.selected {
+  background: color-mix(in srgb, var(--row-shade) 12%, var(--frame-bg, #fff));
+  box-shadow: inset 3px 0 0 var(--blue-deep);
+}
+
+tbody tr.selected td { font-weight: 600; }
+
+/* Split so the hex dump stays visible while the field tree scrolls. */
+.detail {
+  flex: none;
+  width: 390px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.detail-head {
+  flex: none;
+  padding: 14px 16px 0;
+}
+
+.detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 14px;
+}
+
+.detail h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  padding: 0;
+  color: var(--navy);
+}
+
+@media (prefers-color-scheme: dark) {
+  .detail h2 { color: var(--fg); }
+}
+
+/* A frame that repeats an earlier one, with a way back to it. */
+.retx-note {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: color-mix(in srgb, #a0522d 12%, transparent);
+  border-left: 3px solid #a0522d;
+  border-radius: 3px;
+}
+
+.retx-note a {
+  color: var(--blue-deep);
+  text-underline-offset: 2px;
+}
+
+.detail .summary {
+  color: var(--muted);
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.hexview {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  word-break: break-all;
+  padding: 8px 10px;
+  margin-bottom: 14px;
+  /* A long frame scrolls within the dump rather than pushing the tree away. */
+  max-height: 30vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.hexview span.hl {
+  background: var(--blue-deep);
+  color: #fff;
+  border-radius: 2px;
+}
+
+/* Command class and command, named above the decoded parameters. */
+.cc,
+.cmd {
+  margin: 0 0 2px;
+  font-weight: 600;
+}
+
+.cc { color: var(--navy); }
+
+.cc .ver {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.cmd { margin-bottom: 8px; }
+
+@media (prefers-color-scheme: dark) {
+  .cc { color: var(--fg); }
+}
+
+.tree { list-style: none; margin: 0 0 16px; padding: 0; }
+.tree ul { list-style: none; margin: 0; padding-left: 14px; }
+
+.tree li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+.tree li > .k { color: var(--muted); }
+.tree li > .v { font-family: var(--mono); font-size: 12px; text-align: right; }
+.tree li:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); }
+
+/* Navy rather than the blue accent: at this size the blue falls below the
+   4.5:1 contrast minimum. */
+.section {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--navy);
+  margin: 0 0 5px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .section { color: var(--blue); }
+}
+
+.bad { color: var(--bad); }
