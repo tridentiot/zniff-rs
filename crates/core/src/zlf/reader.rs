@@ -3,188 +3,261 @@
 use std::io::{
     self,
     Read,
-    Seek,
 };
+
 use serde::{
     Deserialize,
     Serialize,
 };
 use thiserror::Error;
+
 use crate::zlf::types::{
     ApiType,
     ZLF_VERSION,
 };
 
-/// Zniffer frame kinds (from Silicon Labs Zniffer API docs).
+/// Size of the ZLF file header, in bytes.
+pub const ZLF_HEADER_SIZE: usize = 2048;
+
+/// Offset of the header CRC within the header.
+const HEADER_CRC_OFFSET: usize = 2046;
+
+/// .NET `DateTime` ticks (100 ns units) between 0001-01-01 and the Unix epoch.
+const TICKS_UNIX_EPOCH: i64 = 621_355_968_000_000_000;
+
+/// Ticks per millisecond in .NET `DateTime`.
+const TICKS_PER_MILLISECOND: i64 = 10_000;
+
+/// A timestamp as stored in a ZLF record.
+///
+/// ZLF stores .NET `DateTime.ToBinary()`: the low 62 bits are a tick count
+/// (100 ns units since 0001-01-01) and the top 2 bits are the `DateTimeKind`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum FrameType {
-    Command = 0x00,   // CMD_FRAME
-    Data = 0x01,      // DATA_FRAME
-    Beam = 0x02,      // BEAM_FRAME
-    BeamStart = 0x04, // BEAM_START
-    BeamStop = 0x05,  // BEAM_STOP
+pub struct Timestamp {
+    /// Raw `DateTime.ToBinary()` value, exactly as stored.
+    pub raw: i64,
 }
 
-impl TryFrom<u8> for FrameType {
-    type Error = ();
+impl Timestamp {
+    pub fn from_binary(raw: i64) -> Self {
+        Self { raw }
+    }
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0x00 => Ok(FrameType::Command),
-            0x01 => Ok(FrameType::Data),
-            0x02 => Ok(FrameType::Beam),
-            0x04 => Ok(FrameType::BeamStart),
-            0x05 => Ok(FrameType::BeamStop),
-            _ => Err(()),
-        }
+    /// Tick count with the `DateTimeKind` bits masked off.
+    pub fn ticks(self) -> i64 {
+        self.raw & 0x3FFF_FFFF_FFFF_FFFF
+    }
+
+    /// Milliseconds since the Unix epoch, for use with JS `Date`.
+    pub fn unix_millis(self) -> i64 {
+        (self.ticks() - TICKS_UNIX_EPOCH) / TICKS_PER_MILLISECOND
     }
 }
 
-/// Raw frame as read from ZLF after header.
+/// One record as stored in a ZLF file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RawFrame {
-    pub timestamp: u64, // file timestamp
-    pub sof: u8,         // SOF '#' or SODF '!'
-    pub frame_type: FrameType,  // parsed type
-    pub payload: Vec<u8> // raw payload bytes
-}
-
-/// Decoded DATA_FRAME fields (payload layout mirrors device->host Zniffer API).
-/// payload := [ts_lo, ts_hi, ch_speed, region, rssi (i8), mpdu_len, mpdu...]
-#[derive(Debug, Clone)]
-pub struct DataFrame {
-    pub timestamp: u16,       // wraps; device ticks
-    pub ch_and_speed: u8,     // channel & bitrate
-    pub region: u8,           // region code
-    pub rssi: i8,             // signed RSSI
-    pub mpdu: Vec<u8>,        // Z-Wave MPDU bytes
-}
-
-/// Either a decoded DATA_FRAME or a raw frame for other types.
-#[derive(Debug, Clone)]
-pub enum ZlfRecord {
-    Attachment,
-    Data(DataFrame),
-    Other(RawFrame),
+pub struct ZlfRecord {
+    /// Wall-clock time the record was captured.
+    pub timestamp: Timestamp,
+    /// True when the record was transmitted by the host rather than received.
+    pub is_outcome: bool,
+    /// Capture session the record belongs to.
+    pub session_id: u8,
+    /// What the payload contains.
+    pub api_type: ApiType,
+    /// Raw payload bytes. Not frame-aligned: may hold part of a frame,
+    /// one frame, or several.
+    pub payload: Vec<u8>,
 }
 
 #[derive(Error, Debug)]
 pub enum ZlfError {
     #[error("Invalid ZLF version: {0}")]
     InvalidZlfVersion(u32),
-    #[error("Invalid start pattern")]
-    InvalidStartPattern,
-    #[error("Invalid properties field: {0}")]
-    InvalidPropertiesField(u8),
-    #[error("Invalid API type field: {0}")]
-    InvalidApiTypeField(u8),
+    #[error("Invalid ZLF header checksum")]
+    InvalidHeaderChecksum,
+    #[error("Invalid payload length: {0}")]
+    InvalidPayloadLength(i32),
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
-    #[error("unexpected EOF while parsing a frame")]
+    #[error("unexpected EOF while parsing a record")]
     Eof,
-    #[error("invalid frame marker: {0:#04x}")]
-    BadMarker(u8),
-    #[error("payload too short for data frame")]
-    ShortDataPayload,
 }
 
-pub struct ZlfReader<R: Read + Seek> {
+/// Reads records from a ZLF trace.
+///
+/// Generic over any [`Read`], so it works equally on a file or on an in-memory
+/// buffer via [`std::io::Cursor`] — the latter is what the WebAssembly build uses.
+#[derive(Debug)]
+pub struct ZlfReader<R: Read> {
     r: R,
-    // If you discover version markers in the 2048-byte header, store them here
-    // to adjust parsing per version.
-    frame_counter: usize,
+    record_counter: usize,
 }
 
-impl<R: Read + Seek> ZlfReader<R> {
+impl<R: Read> ZlfReader<R> {
+    /// Read and validate the 2048-byte file header.
     pub fn new(mut r: R) -> Result<Self, ZlfError> {
-        // Read the 2048-byte header into a buffer.
-        let mut header: [u8; 2048] = [0u8; 2048];
+        let mut header = [0u8; ZLF_HEADER_SIZE];
         r.read_exact(&mut header)?;
 
-        // Check header checksum
-        let file_checksum = u16::from_le_bytes([header[2046], header[2047]]);
-        use crc16::*;
-        if State::<AUG_CCITT>::calculate(&header[..2046]) != file_checksum {
-            return Err(ZlfError::InvalidStartPattern);
+        let file_checksum =
+            u16::from_le_bytes([header[HEADER_CRC_OFFSET], header[HEADER_CRC_OFFSET + 1]]);
+        if crc16::State::<crc16::AUG_CCITT>::calculate(&header[..HEADER_CRC_OFFSET])
+            != file_checksum
+        {
+            return Err(ZlfError::InvalidHeaderChecksum);
         }
 
-        // Check for ZLF version at index 0.
-        let version: u32 = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
+        let version = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
         if version != ZLF_VERSION {
             return Err(ZlfError::InvalidZlfVersion(version));
         }
 
-        // Read 4 bytes / 32 bit of text encoding at index 4.
-        let _encoding: u32 = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
+        // header[4..8] is the text encoding and header[8..520] a UTF-16LE
+        // comment; neither is needed to decode records.
 
-        // TODO: Read comment at index 8. 512 bytes.
-
-        Ok(Self { r, frame_counter: 0 })
+        Ok(Self { r, record_counter: 0 })
     }
 
-    pub fn frame_count(&self) -> usize {
-        self.frame_counter
+    /// Number of records read so far.
+    pub fn record_count(&self) -> usize {
+        self.record_counter
     }
 
-    /// Read 2048 bytes and invoke a callback for each frame. Returns Ok(()) at EOF.
-    pub fn read_frames<F>(&mut self, mut callback: F) -> Result<(), ZlfError>
+    /// Invoke `callback` for every remaining record.
+    pub fn read_records<F>(&mut self, mut callback: F) -> Result<(), ZlfError>
     where
         F: FnMut(ZlfRecord),
     {
-        while let Some(frame) = self.next()? {
-            callback(frame);
+        while let Some(record) = self.next_record()? {
+            callback(record);
         }
         Ok(())
     }
 
-    /// Read the next frame. Returns Ok(None) at EOF.
-    pub fn next(&mut self) -> Result<Option<ZlfRecord>, ZlfError> {
-        // Read a timestamp of 8 bytes
+    /// Read the next record, or `Ok(None)` at end of file.
+    pub fn next_record(&mut self) -> Result<Option<ZlfRecord>, ZlfError> {
         let mut timestamp = [0u8; 8];
         match self.r.read_exact(&mut timestamp) {
             Ok(()) => {},
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => return Err(e.into()),
         }
+        let timestamp = Timestamp::from_binary(i64::from_le_bytes(timestamp));
 
+        // Bit 7 marks an outgoing record; the low 7 bits are the session id.
         let mut properties = [0u8; 1];
         self.r.read_exact(&mut properties)?;
-//        if properties[0] != 0 && properties[0] != 0x81 {
-//            return Err(ZlfError::InvalidPropertiesField(properties[0]));
-//        }
+        let is_outcome = properties[0] & 0x80 != 0;
+        let session_id = properties[0] & 0x7F;
 
         let mut payload_length = [0u8; 4];
         self.r.read_exact(&mut payload_length)?;
-        let payload_length: u32 = u32::from_le_bytes(payload_length);
-        //println!("Payload length: {:?}", payload_length);
-
-        let mut payload: Vec<u8> = vec![0u8; payload_length as usize];
-        let mut read = 0usize;
-        while read < payload_length as usize {
-            let n = self.r.read(&mut payload[read..])?;
-            if n == 0 {
-                return Err(ZlfError::Eof);
-            }
-            read += n;
+        let payload_length = i32::from_le_bytes(payload_length);
+        if payload_length < 0 {
+            return Err(ZlfError::InvalidPayloadLength(payload_length));
         }
 
-        //for byte in &payload {
-        //    print!("{:02X} ", byte);
-        //}
-        //println!();
+        let mut payload = vec![0u8; payload_length as usize];
+        self.r.read_exact(&mut payload).map_err(|e| {
+            if e.kind() == io::ErrorKind::UnexpectedEof { ZlfError::Eof } else { e.into() }
+        })?;
 
-        let mut api_type = [0u8; 1];
-        self.r.read_exact(&mut api_type)?;
-        match ApiType::try_from(api_type[0]) {
-            Ok(ApiType::Attachment) => { return Ok(Some(ZlfRecord::Attachment)); },
-            Ok(ApiType::Pti) | Ok(ApiType::Zniffer) => {
-                self.frame_counter += 1;
-                // TODO: Do we need the frame type?
-                let frame_type = FrameType::Data;
-                Ok(Some(ZlfRecord::Other(RawFrame { timestamp: 0, sof: 0, frame_type, payload })))
-            },
-            Err(_) => { return Err(ZlfError::InvalidApiTypeField(api_type[0])); },
-        }
+        // The trailing byte terminates the record and encodes its API type.
+        let mut eod = [0u8; 1];
+        self.r.read_exact(&mut eod).map_err(|e| {
+            if e.kind() == io::ErrorKind::UnexpectedEof { ZlfError::Eof } else { e.into() }
+        })?;
+
+        self.record_counter += 1;
+        Ok(Some(ZlfRecord {
+            timestamp,
+            is_outcome,
+            session_id,
+            api_type: ApiType::from_eod(eod[0]),
+            payload,
+        }))
+    }
+}
+
+impl<R: Read> Iterator for ZlfReader<R> {
+    type Item = Result<ZlfRecord, ZlfError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_record().transpose()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a ZLF header with a valid checksum.
+    fn header(version: u32) -> Vec<u8> {
+        let mut h = vec![0u8; ZLF_HEADER_SIZE];
+        h[..4].copy_from_slice(&version.to_le_bytes());
+        let crc = crc16::State::<crc16::AUG_CCITT>::calculate(&h[..HEADER_CRC_OFFSET]);
+        h[HEADER_CRC_OFFSET..].copy_from_slice(&crc.to_le_bytes());
+        h
+    }
+
+    fn record(raw_ts: i64, properties: u8, payload: &[u8], eod: u8) -> Vec<u8> {
+        let mut r = Vec::new();
+        r.extend_from_slice(&raw_ts.to_le_bytes());
+        r.push(properties);
+        r.extend_from_slice(&(payload.len() as i32).to_le_bytes());
+        r.extend_from_slice(payload);
+        r.push(eod);
+        r
+    }
+
+    #[test]
+    fn rejects_bad_version() {
+        let err = ZlfReader::new(io::Cursor::new(header(103))).unwrap_err();
+        assert!(matches!(err, ZlfError::InvalidZlfVersion(103)));
+    }
+
+    #[test]
+    fn rejects_bad_checksum() {
+        let mut h = header(ZLF_VERSION);
+        h[HEADER_CRC_OFFSET] ^= 0xFF;
+        let err = ZlfReader::new(io::Cursor::new(h)).unwrap_err();
+        assert!(matches!(err, ZlfError::InvalidHeaderChecksum));
+    }
+
+    #[test]
+    fn reads_records_and_keeps_unknown_api_types() {
+        // A value taken from a real trace: 2026-02-04T16:45:30 UTC-ish.
+        let raw_ts = -8_584_313_833_550_718_250i64;
+        let mut data = header(ZLF_VERSION);
+        data.extend(record(raw_ts, 0x00, &[0x5B, 0x41], 0xF5)); // Pti
+        data.extend(record(raw_ts, 0x81, &[0x01], 0xFD)); // Basic, outgoing, session 1
+        data.extend(record(raw_ts, 0x00, &[0x02], 0x00)); // unknown, must not abort
+
+        let mut reader = ZlfReader::new(io::Cursor::new(data)).unwrap();
+        let records: Vec<_> =
+            std::iter::from_fn(|| reader.next_record().transpose()).collect::<Result<_, _>>().unwrap();
+
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].api_type, ApiType::Pti);
+        assert!(!records[0].is_outcome);
+        assert_eq!(records[0].payload, vec![0x5B, 0x41]);
+
+        assert_eq!(records[1].api_type, ApiType::Basic);
+        assert!(records[1].is_outcome);
+        assert_eq!(records[1].session_id, 1);
+
+        // An unrecognised API type is reported, not treated as a fatal error.
+        assert_eq!(records[2].api_type, ApiType::Unknown(0xFE));
+        assert_eq!(reader.record_count(), 3);
+    }
+
+    #[test]
+    fn decodes_dotnet_timestamp() {
+        // Same value as above; DateTimeKind is 2 (UTC) in the top bits.
+        let ts = Timestamp::from_binary(-8_584_313_833_550_718_250i64);
+        assert_eq!((ts.raw >> 62) & 3, 2);
+        // 2026-02-04T16:45:30.405Z
+        assert_eq!(ts.unix_millis(), 1_770_223_530_405);
     }
 }

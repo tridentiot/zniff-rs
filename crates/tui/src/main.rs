@@ -8,7 +8,6 @@ use clap::Parser;
 use std::fs::File;
 use zniff_rs_core::zlf::{
     ZlfReader,
-    ZlfRecord,
 };
 use zniff_rs_core::zniffer_parser;
 use zniff_rs_core::storage::{FrameDatabase, SqliteFrameDatabase, DbFrame};
@@ -95,10 +94,8 @@ impl App {
 
         let mut zniffer_parser = zniffer_parser::Parser::new();
 
-        zlf_reader.read_frames(|rec| {
-            match rec {
-                ZlfRecord::Other(raw) => {
-                    for byte in raw.payload.iter() {
+        zlf_reader.read_records(|rec| {
+            for byte in rec.payload.iter() {
                         let result = zniffer_parser.parse(*byte);
 
                         match result {
@@ -125,11 +122,6 @@ impl App {
                                 // Don't care about other parser results than a valid frame for now.
                             },
                         }
-                    }
-                },
-                _ => {
-                    // Don't care about other record types for now.
-                }
             }
         }).expect("Failed to read frames from ZLF file");
 
