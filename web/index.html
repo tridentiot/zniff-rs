@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!--
+SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Z-Wave Trace Viewer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header>
+      <span class="brand"><span class="mark">TRIDENT<em>IoT</em></span></span>
+      <h1>Z-Wave Trace Viewer</h1>
+      <input
+        id="filter"
+        type="search"
+        placeholder="Filter: src:1 dst:2 speed:2 dir:tx crc:bad singlecast"
+        spellcheck="false"
+        disabled
+      />
+      <label class="goto">
+        Go to
+        <input id="goto" type="datetime-local" step="0.001" disabled />
+      </label>
+      <button id="info-toggle" type="button" title="Trace information" disabled>
+        Trace info
+      </button>
+      <span id="status">Loading…</span>
+    </header>
+
+    <main>
+      <div id="drop" class="drop">
+        <p><strong>Drop a .zlf trace here</strong></p>
+        <p>or <label class="link">choose a file<input id="file" type="file" accept=".zlf,.zwlf" hidden /></label></p>
+        <p class="hint">Add <code>?url=</code> to load a trace from CI automatically.</p>
+      </div>
+
+      <div id="info" class="info" hidden></div>
+
+      <div id="viewer" hidden>
+        <div class="pane">
+          <div id="list" class="list">
+          <table>
+            <colgroup id="cols"></colgroup>
+            <thead>
+              <tr id="head">
+                <th data-key="date">Date</th>
+                <th data-key="time">Time</th>
+                <th data-key="speed">Speed</th>
+                <th class="num" data-key="rssi">RSSI</th>
+                <th class="num" data-key="channel">Ch</th>
+                <th class="num" data-key="delta">Delta</th>
+                <th class="num" data-key="src">Src</th>
+                <th class="num" data-key="dst">Dst</th>
+                <th data-key="home">Home</th>
+                <th data-key="data">Data</th>
+                <th data-key="application">Application</th>
+                <th class="hex" data-key="hexdata">Hex Data</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+          </div>
+          <div class="legend">
+            <span style="color:#167B67">Singlecast</span>
+            <span style="color:#10788D">Routed</span>
+            <span style="color:#0C72B6">Ack</span>
+            <span style="color:#236EC4">Routed ack</span>
+            <span style="color:#4267CD">Broadcast</span>
+            <span style="color:#8B51C5">Multicast / beam</span>
+            <span style="color:#9B5F0D">Explorer</span>
+            <span style="color:#636E7E">Flooded</span>
+            <span style="color:#BA4A2F">Routed error</span>
+            <span style="color:#CF2E2E">CRC error</span>
+          </div>
+        </div>
+        <aside id="detail" class="detail">
+          <p class="hint">Select a frame to see its fields.</p>
+        </aside>
+      </div>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

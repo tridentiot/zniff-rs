@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+# SPDX-License-Identifier: MIT
+node_modules/
+dist/
+pkg/
+
+# Local test traces, generated; not part of the project.
+public/
+.vite/
