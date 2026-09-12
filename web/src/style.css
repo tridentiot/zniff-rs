@@ -369,6 +369,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* The line number orients rather than informs, so it recedes. It is blank
+   when the trace was entered partway through and the count is unknown. */
+.line { color: var(--muted); }
+
 /* A frame the sender repeated because no acknowledgement arrived. */
 .tag {
   display: inline-block;

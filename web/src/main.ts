@@ -113,6 +113,7 @@ const els = {
  * desktop values are too tight for a proportional web font.
  */
 const DEFAULT_WIDTHS: Record<string, number> = {
+  line: 55,
   date: 84,
   time: 100,
   speed: 84,
@@ -220,6 +221,19 @@ let overview: Overview | null = null;
 let rows: Row[] = [];
 /** Record offset of the first window currently in the list. */
 let windowOffset = 0;
+
+/**
+ * Frame number of `rows[0]`, or null when it is not known.
+ *
+ * Numbering a frame means knowing how many came before it, and there is no
+ * index: the only way to know is to have counted them. So the number is
+ * tracked while reading forward from the start of the trace, and is null
+ * after a jump to a time or a record in the middle, where counting the
+ * skipped frames would mean reading the whole file.
+ *
+ * A blank Line cell is therefore honest rather than missing.
+ */
+let firstLine: number | null = null;
 /** Record offset of the window after the last one loaded, or null at EOF. */
 let nextOffset: number | null = null;
 
@@ -291,7 +305,11 @@ function renderRows(): void {
         r.retransmission > 0
           ? `<span class="tag" title="Retransmission, attempt ${r.retransmission + 1}">RETX</span> `
           : "";
+      // Blank when the count is unknown, which is the case after jumping
+      // into the middle of a trace.
+      const line = firstLine === null ? "" : (firstLine + pos).toLocaleString();
       return `<tr data-pos="${pos}" class="${stripe}${sel}${retx}" style="--frame-fg:${r.fg};--frame-bg:${r.bg}">
+        <td class="num line">${line}</td>
         <td>${formatDate(r.time_ms)}</td>
         <td>${formatTime(r.time_ms)}</td>
         <td>${r.speed}</td>
@@ -349,6 +367,9 @@ async function showWindow(offset: number): Promise<void> {
   windowOffset = w.offset;
   nextOffset = w.next_offset ?? null;
   if (nextOffset === null) tailOffset = w.end_offset;
+  // Numbering is only known when the window is the start of the trace;
+  // anywhere else, the frames before it have not been counted.
+  firstLine = overview && w.offset === overview.first_offset ? 1 : null;
   selected = -1;
   renderRows();
   clearDetail();
@@ -386,6 +407,9 @@ async function appendNext(): Promise<void> {
       // scrolling back to the top can still fetch what came before.
       windowOffset = rows[0]?.record_offset ?? windowOffset;
       if (selected >= 0) selected -= dropped;
+      // rows[0] is now a later frame, so its number moves with it. Without
+      // this the trimmed rows would be renumbered from the start.
+      if (firstLine !== null) firstLine += dropped;
     }
 
     renderRows();
@@ -559,6 +583,8 @@ async function showTime(timeMs: number): Promise<void> {
   windowOffset = w.offset;
   nextOffset = w.next_offset ?? null;
   if (nextOffset === null) tailOffset = w.end_offset;
+  // A jump by time skips an unknown number of frames.
+  firstLine = overview && w.offset === overview.first_offset ? 1 : null;
   ahead = null;
   selected = -1;
   renderRows();
@@ -708,6 +734,9 @@ async function applyFilter(): Promise<void> {
 
   rows = [];
   selected = -1;
+  // Matches are scattered through the trace, so consecutive result rows are
+  // not consecutive frames; numbering them 1, 2, 3 would be a lie.
+  firstLine = null;
   clearDetail();
 
   let offset = overview.first_offset;
