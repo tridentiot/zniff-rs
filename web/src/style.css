@@ -159,6 +159,11 @@ h1::before {
 
 main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
+/* A flex or grid child is laid out by its container, which overrides the
+   `hidden` attribute's display:none. Without this, hiding an element by
+   setting `hidden` silently does nothing. */
+[hidden] { display: none !important; }
+
 /* Header button, matching the filter field it sits beside. */
 #info-toggle,
 #capture-stop,
