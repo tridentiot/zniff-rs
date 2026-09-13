@@ -404,7 +404,7 @@ async function appendNext(): Promise<void> {
       dropped = rows.length - MAX_ROWS;
       rows = rows.slice(dropped);
       // The first window in the list has moved on; remember where from, so
-      // scrolling back to the top can still fetch what came before.
+      // `prependPrevious` knows what to read back.
       windowOffset = rows[0]?.record_offset ?? windowOffset;
       if (selected >= 0) selected -= dropped;
       // rows[0] is now a later frame, so its number moves with it. Without
@@ -466,6 +466,52 @@ function stopLiveTail(): void {
   if (!live) return;
   window.clearInterval(live.timer);
   live = null;
+}
+
+/**
+ * Put back the window before the one at the top of the list.
+ *
+ * Rows trimmed by `appendNext` are gone from the DOM but not from the trace,
+ * so scrolling back re-reads them. The scroll position is moved down by the
+ * height of what was inserted, which keeps the rows under the cursor still.
+ */
+async function prependPrevious(): Promise<void> {
+  if (!trace || paging || windowOffset <= 0) return;
+  // Already at the start; nothing came before.
+  if (overview && windowOffset <= overview.first_offset) return;
+
+  paging = true;
+  try {
+    const w = (await trace.rows_before(windowOffset, WINDOW)) as Window_;
+    if (w.rows.length === 0) return;
+
+    rows = w.rows.concat(rows);
+    windowOffset = w.offset;
+    if (selected >= 0) selected += w.rows.length;
+    // The list now starts earlier, so its first frame number does too.
+    if (firstLine !== null) firstLine -= w.rows.length;
+    // Scrolling back far enough to reach the start makes the count known,
+    // even if the trace was entered somewhere in the middle.
+    if (firstLine === null && overview && w.offset === overview.first_offset) {
+      firstLine = 1;
+    }
+
+    let dropped = 0;
+    if (rows.length > MAX_ROWS) {
+      // Trim from the far end this time, so scrolling back does not grow
+      // the list without bound.
+      dropped = rows.length - MAX_ROWS;
+      rows = rows.slice(0, MAX_ROWS);
+      if (selected >= MAX_ROWS) selected = -1;
+      nextOffset = rows[rows.length - 1]?.record_offset ?? nextOffset;
+    }
+
+    renderRows();
+    // Inserting above would otherwise push the view down by that much.
+    els.list.scrollTop += w.rows.length * rowHeight;
+  } finally {
+    paging = false;
+  }
 }
 
 /**
@@ -815,6 +861,10 @@ function wireUp(): void {
       // Load more rather than only moving within what is loaded.
       void appendNext();
       e.preventDefault();
+    } else if (e.key === "Home") {
+      // Likewise backwards, for rows that were trimmed off the front.
+      void prependPrevious();
+      e.preventDefault();
     }
   });
 
@@ -827,6 +877,8 @@ function wireUp(): void {
     if (f > 0.5) prefetchNext();
     // Near the bottom: add the rows to the list.
     if (f > 0.85) void appendNext();
+    // Near the top: put back the rows that were trimmed off the front.
+    if (f < 0.15) void prependPrevious();
   });
 
   let debounce: number;
