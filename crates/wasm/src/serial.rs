@@ -83,6 +83,10 @@ async fn race(promise: js_sys::Promise, timeout_ms: i32) -> Option<Result<JsValu
 #[wasm_bindgen]
 pub struct SerialZniffer {
     port: SerialPort,
+    /// Held for the life of the connection; see `read_chunk`.
+    reader: Option<ReadableStreamDefaultReader>,
+    /// A read that has been issued but has not resolved yet.
+    reading: Option<js_sys::Promise>,
     /// Bytes read but not yet consumed by a response match.
     pending: Vec<u8>,
     /// Every command written, so a capture can record them the way the
@@ -107,7 +111,13 @@ impl SerialZniffer {
             }
 
             let mut device =
-                SerialZniffer { port: port.clone(), pending: Vec::new(), sent: Vec::new() };
+                SerialZniffer {
+                    port: port.clone(),
+                    reader: None,
+                    reading: None,
+                    pending: Vec::new(),
+                    sent: Vec::new(),
+                };
 
             // Stop first: a device left capturing would bury the version
             // response under frames.
@@ -186,6 +196,16 @@ impl SerialZniffer {
     /// Stop capturing and release the port.
     pub async fn close(&mut self) -> Result<(), JsError> {
         let _ = self.request(CMD_STOP, &[0x00], 12).await;
+
+        // Release the reader before closing: a locked stream refuses, and
+        // the port would stay held until the tab went away.
+        if let Some(reader) = self.reader.take() {
+            // Cancel here, where ending the stream is exactly what is wanted.
+            let _ = JsFuture::from(reader.cancel()).await;
+            reader.release_lock();
+        }
+        self.reading = None;
+
         JsFuture::from(self.port.close())
             .await
             .map_err(|e| JsError::new(&format!("closing the port failed: {e:?}")))?;
@@ -262,25 +282,41 @@ impl SerialZniffer {
     /// to say, and several commands — `SetFrequency` among them — send no
     /// reply at all. Without a timeout those calls wait forever.
     ///
+    /// On expiry the pending read is *left* pending and the reader is kept:
+    /// `cancel()` would close the whole stream, not just this read, and
+    /// every later read would then report the port as finished. The next
+    /// call awaits the same read, so a reply that arrives late is still
+    /// picked up rather than lost.
+    ///
     /// `Ok(Some(empty))` means the wait expired, which is not an error: a
     /// quiet radio looks exactly the same as one that has finished talking.
-    async fn read_chunk(&self, timeout_ms: i32) -> Result<Option<Vec<u8>>, JsError> {
-        let readable = self.port.readable();
-        let reader: ReadableStreamDefaultReader = readable
-            .get_reader()
-            .unchecked_into();
+    async fn read_chunk(&mut self, timeout_ms: i32) -> Result<Option<Vec<u8>>, JsError> {
+        // One reader for the life of the connection. Taking a new one per
+        // read would need a release between each, and releasing with a read
+        // still pending throws.
+        if self.reader.is_none() {
+            let readable = self.port.readable();
+            let reader: ReadableStreamDefaultReader =
+                readable.get_reader().unchecked_into();
+            self.reader = Some(reader);
+        }
+        let reader = self.reader.as_ref().expect("just set");
 
-        let result = match race(reader.read(), timeout_ms).await {
+        // Keep the in-flight read across calls, so an expiry does not drop
+        // a reply that is merely slow.
+        let pending = match self.reading.take() {
+            Some(promise) => promise,
+            None => reader.read(),
+        };
+
+        let result = match race(pending.clone(), timeout_ms).await {
             Some(result) => result,
             None => {
-                // Cancel the pending read, or the next one inherits it and
-                // the stream stays locked.
-                let _ = reader.cancel();
-                reader.release_lock();
+                // Still waiting; hold on to it for next time.
+                self.reading = Some(pending);
                 return Ok(Some(Vec::new()));
             },
         };
-        reader.release_lock();
 
         let value = result
             .map_err(|e| JsError::new(&format!("reading from the port failed: {e:?}")))?;

@@ -10,6 +10,16 @@
 pub const SOF_COMMAND: u8 = 0x23;
 
 pub const CMD_GET_VERSION: u8 = 0x01;
+
+/// Select the capture region.
+///
+/// Alone among the commands, this one sends **no reply**: in the zniffer
+/// firmware (`apps/zniffer/zniffer_app.c`, `ZNIFFER_CMD_SET_REGION`) the
+/// handler changes the radio region and returns, while every other case
+/// calls `zniffer_reply_data` or `zniffer_reply_no_data`.
+///
+/// Waiting for a response to it therefore waits forever. Confirm the change
+/// by reading [`CMD_GET_FREQUENCIES`] back instead.
 pub const CMD_SET_FREQUENCY: u8 = 0x02;
 pub const CMD_GET_FREQUENCIES: u8 = 0x03;
 pub const CMD_START: u8 = 0x04;
