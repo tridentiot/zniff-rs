@@ -34,6 +34,12 @@ SPDX-License-Identifier: MIT
       <button id="info-toggle" type="button" title="Trace information" disabled>
         Trace info
       </button>
+      <button id="capture-stop" type="button" title="Stop capturing" hidden>
+        Stop
+      </button>
+      <button id="capture-save" type="button" title="Save the capture" hidden>
+        Save .zlf
+      </button>
       <span id="status">Loading…</span>
     </header>
 
@@ -42,6 +48,10 @@ SPDX-License-Identifier: MIT
         <p><strong>Drop a .zlf trace here</strong></p>
         <p>or <label class="link">choose a file<input id="file" type="file" accept=".zlf,.zwlf" hidden /></label></p>
         <p class="hint">Add <code>?url=</code> to load a trace from CI automatically.</p>
+        <p id="serial" class="serial" hidden>
+          or <button id="connect" type="button" class="connect">connect a zniffer</button>
+          <span class="hint">captures live from a dongle, no install needed</span>
+        </p>
       </div>
 
       <div id="info" class="info" hidden></div>

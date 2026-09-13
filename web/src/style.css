@@ -556,3 +556,17 @@ tbody tr.selected td { font-weight: 600; }
 }
 
 .bad { color: var(--bad); }
+
+/* Web Serial capture, offered only where the browser supports it. */
+.serial { margin-top: 1rem; }
+.connect {
+  font: inherit;
+  color: var(--brand);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.connect:hover { color: var(--brand-dark, var(--brand)); }
+.serial .hint { display: block; margin-top: 0.25rem; }

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
 import init, { Trace } from "../pkg/zniff_rs_wasm.js";
+import { type Capture, connect, serialSupported } from "./capture.js";
 
 interface Row {
   record_offset: number;
@@ -104,6 +105,10 @@ const els = {
   goto: $<HTMLInputElement>("goto"),
   info: $<HTMLDivElement>("info"),
   infoToggle: $<HTMLButtonElement>("info-toggle"),
+  serial: $<HTMLParagraphElement>("serial"),
+  connect: $<HTMLButtonElement>("connect"),
+  captureStop: $<HTMLButtonElement>("capture-stop"),
+  captureSave: $<HTMLButtonElement>("capture-save"),
 };
 
 /**
@@ -249,6 +254,9 @@ let live: { timer: number; size: number } | null = null;
 
 /** Where to resume from after the trace grows, set when EOF is reached. */
 let tailOffset: number | null = null;
+
+/** The capture in progress, when one is running. */
+let capture: Capture | null = null;
 /** Set while a window is loading, so scrolling cannot re-enter. */
 let paging = false;
 
@@ -841,8 +849,68 @@ function measureRowHeight(): void {
   }
 }
 
+/** Start capturing from a dongle the user picks. */
+async function startCapture(): Promise<void> {
+  if (capture) return;
+  els.status.textContent = "Waiting for a zniffer…";
+  try {
+    // The region comes from the URL when given, so a CI page can pin it.
+    const region = new URLSearchParams(location.search).get("region");
+    capture = await connect(region);
+  } catch (e) {
+    // A cancelled picker is a choice, not a failure.
+    const message = String(e);
+    els.status.textContent = /NotFoundError|cancel/i.test(message)
+      ? ""
+      : `Could not connect: ${message}`;
+    return;
+  }
+
+  els.captureStop.hidden = false;
+  els.captureSave.hidden = false;
+  els.connect.disabled = true;
+  await load(() => capture!.trace, "the zniffer");
+  startLiveTail();
+}
+
+/** Stop the capture, leaving the frames on screen. */
+async function stopCapture(): Promise<void> {
+  if (!capture) return;
+  await capture.stop();
+  stopLiveTail();
+  els.captureStop.hidden = true;
+  els.connect.disabled = false;
+  updateStatus();
+}
+
+/** Save the capture as a .zlf. */
+function saveCapture(): void {
+  if (!capture) return;
+  // Copy into a plain ArrayBuffer: the WASM view is over memory that may be
+  // shared, which Blob will not take.
+  const bytes = capture.bytes();
+  const buffer = new ArrayBuffer(bytes.length);
+  new Uint8Array(buffer).set(bytes);
+  const blob = new Blob([buffer], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  a.download = `capture-${stamp}.zlf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function wireUp(): void {
   setUpColumns();
+
+  // Only offered where the browser can actually talk to a serial port.
+  if (serialSupported()) {
+    els.serial.hidden = false;
+    els.connect.addEventListener("click", () => void startCapture());
+    els.captureStop.addEventListener("click", () => void stopCapture());
+    els.captureSave.addEventListener("click", saveCapture);
+  }
 
   els.rows.addEventListener("click", (e) => {
     const tr = (e.target as HTMLElement).closest("tr");
