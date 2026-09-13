@@ -288,6 +288,25 @@ impl Trace {
         Ok(len as f64)
     }
 
+    /// Decode up to `count` frames ending just before the record at `offset`.
+    ///
+    /// This is how the viewer scrolls back to frames it trimmed out of the
+    /// list after reading them once.
+    pub async fn rows_before(
+        &mut self,
+        offset: f64,
+        count: usize,
+    ) -> Result<JsValue, JsError> {
+        let at = offset as u64;
+        // Reading backwards resyncs from earlier in the file, so make sure
+        // those bytes are present before the synchronous decode.
+        let back = (count as u64 + 8) * 64;
+        let from = at.saturating_sub(back);
+        self.prefetch(from, at.saturating_sub(from) + PROBE).await?;
+        let window = self.cursor.frames_before(at, count).map_err(io_err)?;
+        self.window_to_js(window)
+    }
+
     /// Size, time span and a rough frame count.
     pub async fn overview(&mut self) -> Result<JsValue, JsError> {
         let size = self.cursor.source().len();
