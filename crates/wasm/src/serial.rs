@@ -109,6 +109,22 @@ impl SerialZniffer {
         }
     }
 
+    /// Select the capture region by the code the device reported.
+    ///
+    /// Takes a raw code rather than a name: the hardware lists regions the
+    /// `Region` enum does not name, such as the LR end-device variants, and
+    /// those must still be selectable.
+    pub async fn set_region_code(&mut self, code: u8) -> Result<(), JsError> {
+        let _ = self.request(CMD_SET_FREQUENCY, &[0x01, code], 8).await;
+        match self.current_region().await? {
+            Some(actual) if actual == code => Ok(()),
+            Some(actual) => Err(JsError::new(&format!(
+                "the device stayed on region {actual:#04x} instead of {code:#04x}"
+            ))),
+            None => Err(JsError::new("the device did not report its region")),
+        }
+    }
+
     /// The region code the device is tuned to.
     pub async fn current_region(&mut self) -> Result<Option<u8>, JsError> {
         let payload = self.request(CMD_GET_FREQUENCIES, &[0x00], 16).await?;
