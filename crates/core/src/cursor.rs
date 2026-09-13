@@ -22,6 +22,10 @@ use crate::trace::{
 use crate::zlf::ZLF_HEADER_SIZE;
 use crate::zlf::types::ApiType;
 
+/// Rough bytes per record, for guessing how far back to step when reading
+/// backwards. Only an estimate: the search widens when it falls short.
+const ESTIMATED_RECORD_BYTES: u64 = 64;
+
 /// How far a stepped seek has narrowed.
 #[derive(Debug, Clone, Copy)]
 pub enum SeekState {
@@ -337,6 +341,82 @@ impl<S: TraceSource> TraceCursor<S> {
         }
 
         Ok(FrameWindow { offset: start, frames, origins, next_offset, end_offset: at })
+    }
+
+    /// Decode up to `count` frames ending just before the record at `offset`.
+    ///
+    /// Records can only be read forwards, so this steps back a byte window,
+    /// resyncs to the first boundary there, and reads forward to `offset`,
+    /// keeping the last `count` frames. Stepping back further than needed is
+    /// harmless: the extra frames are discarded.
+    ///
+    /// This is what lets a reader scroll back to frames that were trimmed out
+    /// of the list after being read once.
+    pub fn frames_before(&mut self, offset: u64, count: usize) -> io::Result<FrameWindow> {
+        let first = match self.first_record()? {
+            Some(first) => first,
+            None => {
+                return Ok(FrameWindow {
+                    offset,
+                    frames: Vec::new(),
+                    origins: Vec::new(),
+                    next_offset: None,
+                    end_offset: offset,
+                });
+            },
+        };
+        if offset <= first {
+            return Ok(FrameWindow {
+                offset: first,
+                frames: Vec::new(),
+                origins: Vec::new(),
+                next_offset: Some(offset),
+                end_offset: first,
+            });
+        }
+
+        // Enough bytes to hold `count` frames with room to spare, so one step
+        // back is normally enough; widen if it was not.
+        let mut back = (count as u64 + 8) * ESTIMATED_RECORD_BYTES;
+        loop {
+            let from = offset.saturating_sub(back).max(first);
+            let start = match resync::next_record_at(&mut self.source, from, DEFAULT_WINDOW)? {
+                Some(at) if at < offset => at,
+                // No boundary before the target: start from the beginning.
+                _ => first,
+            };
+
+            let mut frames = Vec::new();
+            let mut origins = Vec::new();
+            let mut previous: Option<i64> = None;
+            let mut at = start;
+            while at < offset {
+                let Some(rec) = resync::read_record(&mut self.source, at)? else {
+                    break;
+                };
+                let before = frames.len();
+                self.decode_record(&rec, &mut frames, &mut previous)?;
+                origins.extend((0..frames.len() - before).map(|i| (rec.offset, i)));
+                at = rec.next_offset();
+            }
+
+            // Keep only the last `count`, unless the trace starts here, in
+            // which case there is nothing earlier to miss.
+            let enough = frames.len() >= count || start == first;
+            if enough {
+                let drop = frames.len().saturating_sub(count);
+                return Ok(FrameWindow {
+                    offset: if drop > 0 { origins[drop].0 } else { start },
+                    frames: frames.split_off(drop),
+                    origins: origins.split_off(drop),
+                    next_offset: Some(offset),
+                    end_offset: at,
+                });
+            }
+
+            // Too few frames: the records were larger than estimated.
+            back *= 2;
+        }
     }
 
     /// Decode `count` frames starting from the first one at or after `time_ms`.
