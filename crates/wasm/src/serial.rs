@@ -17,7 +17,6 @@ use web_sys::{
     SerialPort,
     WritableStreamDefaultWriter,
 };
-use zniff_rs_core::types::Region;
 use zniff_rs_core::zniffer::{
     BAUD_RATES,
     CMD_GET_FREQUENCIES,
@@ -90,23 +89,6 @@ impl SerialZniffer {
         Version::parse(&payload)
             .map(|v| v.to_string())
             .ok_or_else(|| JsError::new("malformed version response"))
-    }
-
-    /// Select the capture region.
-    ///
-    /// The device sends no response to this command, so it is confirmed by
-    /// reading the current region back rather than by waiting for a reply.
-    pub async fn set_region(&mut self, region: &str) -> Result<(), JsError> {
-        let region: Region = region
-            .parse()
-            .map_err(|_| JsError::new(&format!("unknown region {region}")))?;
-        let code = region as u8;
-        let _ = self.request(CMD_SET_FREQUENCY, &[0x01, code], 8).await;
-
-        match self.current_region().await? {
-            Some(actual) if actual == code => Ok(()),
-            _ => Err(JsError::new(&format!("the device did not accept region {region:?}"))),
-        }
     }
 
     /// Select the capture region by the code the device reported.
