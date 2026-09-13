@@ -251,6 +251,42 @@ impl TraceSource for Backing {
 
 #[wasm_bindgen]
 impl Trace {
+    /// Start an empty trace that grows as bytes are captured.
+    ///
+    /// The viewer's live tail already re-reads the source length on every
+    /// poll, so appending here is enough to make frames appear; nothing
+    /// else has to know the trace came from a serial port.
+    pub fn open_live(header: Vec<u8>) -> Result<Trace, JsError> {
+        let cursor = TraceCursor::new(Backing::Memory(header), Definitions::load())
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Trace { cursor })
+    }
+
+    /// Append captured bytes to a live trace.
+    ///
+    /// Returns the new length, which is what `poll_growth` reports.
+    pub fn append(&mut self, bytes: &[u8]) -> Result<f64, JsError> {
+        match self.cursor.source_mut() {
+            Backing::Memory(buffer) => {
+                buffer.extend_from_slice(bytes);
+                Ok(buffer.len() as f64)
+            },
+            Backing::Http(_) => {
+                Err(JsError::new("only an in-memory trace can be appended to"))
+            },
+        }
+    }
+
+    /// The whole trace, for saving to a file.
+    pub fn bytes(&mut self) -> Result<Vec<u8>, JsError> {
+        match self.cursor.source_mut() {
+            Backing::Memory(buffer) => Ok(buffer.clone()),
+            Backing::Http(_) => {
+                Err(JsError::new("a linked trace is already a file"))
+            },
+        }
+    }
+
     /// Open a trace already in memory.
     pub fn open_bytes(bytes: Vec<u8>) -> Result<Trace, JsError> {
         let cursor = TraceCursor::new(Backing::Memory(bytes), Definitions::load())
@@ -671,3 +707,8 @@ fn app_field(
         children: param.children.iter().map(|p| app_field(p, payload_at)).collect(),
     }
 }
+// Web Serial exists only in a browser, and its bindings are gated behind
+// web-sys's unstable-API flag (set for wasm32 in .cargo/config.toml).
+// Compiling it for the host would fail and gains nothing.
+#[cfg(target_arch = "wasm32")]
+pub mod serial;

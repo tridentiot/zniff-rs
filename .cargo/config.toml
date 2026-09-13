@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
+# SPDX-License-Identifier: MIT
+
+# Web Serial lives behind web-sys's unstable-API gate, so the browser build
+# needs this flag. Set here rather than in the npm scripts so every build
+# path — cargo, wasm-pack, an IDE — agrees, and a missing flag cannot show
+# up as a confusing "no SerialPort in the root".
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg=web_sys_unstable_apis"]
