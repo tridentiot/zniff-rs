@@ -844,6 +844,7 @@ async function load(open: () => Promise<Trace> | Trace, label: string): Promise<
   els.goto.disabled = false;
   els.infoToggle.disabled = false;
   els.info.hidden = true;
+  els.info.dataset.filled = "";
   els.infoToggle.setAttribute("aria-expanded", "false");
 
   measureRowHeight();
@@ -964,8 +965,35 @@ function saveCapture(): void {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Show or hide the trace information panel.
+ *
+ * The contents are read from the trace the first time it is opened, since
+ * that samples frames and there is no reason to pay for it unasked.
+ */
+async function toggleInfo(): Promise<void> {
+  if (!trace) return;
+  const showing = els.info.hidden;
+  if (showing && !els.info.dataset.filled) {
+    els.info.innerHTML = "<p>Reading\u2026</p>";
+    els.info.hidden = false;
+    els.infoToggle.setAttribute("aria-expanded", "true");
+    try {
+      await showInfo();
+      els.info.dataset.filled = "1";
+    } catch (e) {
+      els.info.innerHTML = `<p>Could not read the trace information: ${escape(String(e))}</p>`;
+    }
+    return;
+  }
+  els.info.hidden = !showing;
+  els.infoToggle.setAttribute("aria-expanded", String(showing));
+}
+
 function wireUp(): void {
   setUpColumns();
+
+  els.infoToggle.addEventListener("click", () => void toggleInfo());
 
   // Only offered where the browser can actually talk to a serial port.
   if (serialSupported()) {
