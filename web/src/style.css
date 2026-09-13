@@ -160,7 +160,9 @@ h1::before {
 main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* Header button, matching the filter field it sits beside. */
-#info-toggle {
+#info-toggle,
+#capture-stop,
+#capture-save {
   flex: none;
   height: 32px;
   padding: 0 12px;
@@ -174,8 +176,12 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   white-space: nowrap;
 }
 
-#info-toggle:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
-#info-toggle:disabled { opacity: 0.45; cursor: default; }
+#info-toggle:hover:not(:disabled),
+#capture-stop:hover:not(:disabled),
+#capture-save:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
+#info-toggle:disabled,
+#capture-stop:disabled,
+#capture-save:disabled { opacity: 0.45; cursor: default; }
 #info-toggle[aria-expanded="true"] {
   background: var(--blue);
   border-color: var(--blue);
@@ -561,12 +567,60 @@ tbody tr.selected td { font-weight: 600; }
 .serial { margin-top: 1rem; }
 .connect {
   font: inherit;
-  color: var(--brand);
+  color: var(--accent);
   background: none;
   border: 0;
   padding: 0;
   text-decoration: underline;
   cursor: pointer;
 }
-.connect:hover { color: var(--brand-dark, var(--brand)); }
+.connect:hover { color: var(--blue-deep); }
 .serial .hint { display: block; margin-top: 0.25rem; }
+
+/* Region picker, shown after a dongle is connected. */
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.picker-device {
+  flex-basis: 100%;
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+}
+.picker-region {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.picker select {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.picker button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.picker button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.picker button:disabled { opacity: 0.6; cursor: default; }

@@ -52,6 +52,15 @@ SPDX-License-Identifier: MIT
           or <button id="connect" type="button" class="connect">connect a zniffer</button>
           <span class="hint">captures live from a dongle, no install needed</span>
         </p>
+        <div id="picker" class="picker" hidden>
+          <p id="picker-device" class="picker-device"></p>
+          <label class="picker-region">
+            Region
+            <select id="region"></select>
+          </label>
+          <button id="picker-start" type="button" class="primary">Start capture</button>
+          <button id="picker-cancel" type="button">Cancel</button>
+        </div>
       </div>
 
       <div id="info" class="info" hidden></div>

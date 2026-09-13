@@ -1,7 +1,12 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
 import init, { Trace } from "../pkg/zniff_rs_wasm.js";
-import { type Capture, connect, serialSupported } from "./capture.js";
+import {
+  type Capture,
+  type Dongle,
+  connect,
+  serialSupported,
+} from "./capture.js";
 
 interface Row {
   record_offset: number;
@@ -109,6 +114,11 @@ const els = {
   connect: $<HTMLButtonElement>("connect"),
   captureStop: $<HTMLButtonElement>("capture-stop"),
   captureSave: $<HTMLButtonElement>("capture-save"),
+  picker: $<HTMLDivElement>("picker"),
+  pickerDevice: $<HTMLParagraphElement>("picker-device"),
+  region: $<HTMLSelectElement>("region"),
+  pickerStart: $<HTMLButtonElement>("picker-start"),
+  pickerCancel: $<HTMLButtonElement>("picker-cancel"),
 };
 
 /**
@@ -849,28 +859,81 @@ function measureRowHeight(): void {
   }
 }
 
-/** Start capturing from a dongle the user picks. */
-async function startCapture(): Promise<void> {
-  if (capture) return;
-  els.status.textContent = "Waiting for a zniffer…";
+/** The connected dongle, while the region is being chosen. */
+let dongle: Dongle | null = null;
+
+/** Connect to a dongle and offer its regions. */
+async function connectDongle(): Promise<void> {
+  if (capture || dongle) return;
+  els.status.textContent = "Waiting for a zniffer\u2026";
   try {
-    // The region comes from the URL when given, so a CI page can pin it.
-    const region = new URLSearchParams(location.search).get("region");
-    capture = await connect(region);
+    dongle = await connect();
   } catch (e) {
     // A cancelled picker is a choice, not a failure.
     const message = String(e);
-    els.status.textContent = /NotFoundError|cancel/i.test(message)
+    els.status.textContent = /NotFoundError|cancel|No port selected/i.test(message)
       ? ""
       : `Could not connect: ${message}`;
     return;
   }
 
+  els.pickerDevice.textContent = dongle.version;
+  // The list comes from the device, so it shows what this dongle can do
+  // rather than what the software knows about.
+  els.region.innerHTML = dongle.regions
+    .map(
+      (r) =>
+        `<option value="${r.code}"${r.current ? " selected" : ""}>${escape(r.name)}</option>`,
+    )
+    .join("");
+
+  // A region named in the URL wins, so a CI page can pin one.
+  const wanted = new URLSearchParams(location.search).get("region");
+  if (wanted) {
+    const match = dongle.regions.find(
+      (r) => r.name.toLowerCase() === wanted.toLowerCase() || String(r.code) === wanted,
+    );
+    if (match) els.region.value = String(match.code);
+  }
+
+  els.picker.hidden = false;
+  els.connect.disabled = true;
+  els.status.textContent = "";
+}
+
+/** Tune to the chosen region and start capturing. */
+async function startCapture(): Promise<void> {
+  if (!dongle) return;
+  const code = Number(els.region.value);
+  const name = els.region.selectedOptions[0]?.textContent ?? String(code);
+  els.status.textContent = `Tuning to ${name}\u2026`;
+  els.pickerStart.disabled = true;
+
+  try {
+    capture = await dongle.start(code);
+  } catch (e) {
+    els.status.textContent = `Could not start: ${e}`;
+    els.pickerStart.disabled = false;
+    return;
+  }
+
+  dongle = null;
+  els.picker.hidden = true;
+  els.pickerStart.disabled = false;
   els.captureStop.hidden = false;
   els.captureSave.hidden = false;
-  els.connect.disabled = true;
-  await load(() => capture!.trace, "the zniffer");
+  await load(() => capture!.trace, `the zniffer on ${name}`);
   startLiveTail();
+}
+
+/** Release the port without capturing. */
+async function cancelConnect(): Promise<void> {
+  if (!dongle) return;
+  await dongle.cancel();
+  dongle = null;
+  els.picker.hidden = true;
+  els.connect.disabled = false;
+  els.status.textContent = "";
 }
 
 /** Stop the capture, leaving the frames on screen. */
@@ -907,7 +970,9 @@ function wireUp(): void {
   // Only offered where the browser can actually talk to a serial port.
   if (serialSupported()) {
     els.serial.hidden = false;
-    els.connect.addEventListener("click", () => void startCapture());
+    els.connect.addEventListener("click", () => void connectDongle());
+    els.pickerStart.addEventListener("click", () => void startCapture());
+    els.pickerCancel.addEventListener("click", () => void cancelConnect());
     els.captureStop.addEventListener("click", () => void stopCapture());
     els.captureSave.addEventListener("click", saveCapture);
   }
