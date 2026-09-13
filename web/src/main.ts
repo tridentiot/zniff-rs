@@ -1068,7 +1068,7 @@ async function main(): Promise<void> {
   const url = params.get("trace") ?? params.get("url");
   if (url) {
     await load(() => Trace.open_url(url), url);
-    // A capture served by `zniff-serve` is still growing; follow it.
+    // `?live=1` follows a trace that something else is still appending to.
     if (params.get("live") === "1" && trace) startLiveTail();
   }
 }
