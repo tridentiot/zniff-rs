@@ -75,6 +75,14 @@ pub fn command(cmd: u8, parameters: &[u8]) -> Vec<u8> {
 /// Returns `None` while the response is still arriving, so a caller can keep
 /// reading rather than treating a short buffer as a failure.
 pub fn response_payload(buffer: &[u8], cmd: u8) -> Option<Vec<u8>> {
+    found_response(buffer, cmd).map(|(payload, _)| payload)
+}
+
+/// As [`response_payload`], but also reporting where the response ended.
+///
+/// Anything after that point is not part of the reply — captured frames,
+/// most likely — so a caller can keep it instead of discarding it.
+pub fn found_response(buffer: &[u8], cmd: u8) -> Option<(Vec<u8>, usize)> {
     let mut i = 0;
     while i + 3 <= buffer.len() {
         if buffer[i] != SOF_COMMAND {
@@ -87,7 +95,7 @@ pub fn response_payload(buffer: &[u8], cmd: u8) -> Option<Vec<u8>> {
             return None; // Response still arriving.
         }
         if buffer[i + 1] == cmd {
-            return Some(buffer[i + 3..end].to_vec());
+            return Some((buffer[i + 3..end].to_vec(), end));
         }
         i = end;
     }
@@ -163,6 +171,15 @@ mod tests {
     fn waits_for_a_truncated_response() {
         let buffer = [0x23, 0x01, 0x04, 0x14, 0x00];
         assert!(response_payload(&buffer, CMD_GET_VERSION).is_none());
+    }
+
+    #[test]
+    fn reports_where_a_response_ended() {
+        // A reply followed by capture data: the tail must survive.
+        let buffer = [0x23, 0x05, 0x00, 0x21, 0x03, 0xAA, 0xBB];
+        let (payload, end) = found_response(&buffer, CMD_STOP).unwrap();
+        assert!(payload.is_empty());
+        assert_eq!(&buffer[end..], &[0x21, 0x03, 0xAA, 0xBB], "frames kept");
     }
 
     #[test]
