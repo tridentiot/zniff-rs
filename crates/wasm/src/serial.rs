@@ -28,10 +28,56 @@ use zniff_rs_core::zniffer::{
     Version,
     command,
     current_region,
+    found_response,
     region_name,
     response_payload,
     supported_regions,
 };
+
+/// How long to wait for a command response before giving up on it.
+///
+/// Responses come back in a few milliseconds; this only has to be longer
+/// than that, and short enough that a command which never answers does not
+/// stall the caller noticeably.
+const READ_TIMEOUT_MS: i32 = 120;
+
+/// How long a capture read waits before returning empty.
+///
+/// Longer, because silence is the normal state of a quiet radio and each
+/// expiry costs a round trip through the event loop.
+const CAPTURE_TIMEOUT_MS: i32 = 500;
+
+/// Resolve `promise`, or `None` if `timeout_ms` passes first.
+///
+/// Races the promise against a `setTimeout`, and marks the timer's result
+/// with a sentinel so the two outcomes can be told apart.
+async fn race(promise: js_sys::Promise, timeout_ms: i32) -> Option<Result<JsValue, JsValue>> {
+    const EXPIRED: &str = "__zniff_timeout";
+
+    let timer = js_sys::Promise::new(&mut |resolve, _reject| {
+        let global = js_sys::global();
+        // setTimeout lives on the window or the worker scope; both expose it
+        // on the global object.
+        if let Ok(set_timeout) = js_sys::Reflect::get(&global, &JsValue::from_str("setTimeout"))
+            && let Some(set_timeout) = set_timeout.dyn_ref::<js_sys::Function>()
+        {
+            // Resolve with the sentinel, so a timeout is distinguishable
+            // from a read that genuinely returned.
+            let _ = set_timeout.call3(
+                &global,
+                &resolve,
+                &JsValue::from(timeout_ms),
+                &JsValue::from_str(EXPIRED),
+            );
+        }
+    });
+
+    let raced = js_sys::Promise::race(&js_sys::Array::of2(&promise, &timer));
+    match JsFuture::from(raced).await {
+        Ok(v) if v.as_string().as_deref() == Some(EXPIRED) => None,
+        other => Some(other),
+    }
+}
 
 /// A zniffer reached over Web Serial.
 #[wasm_bindgen]
@@ -161,7 +207,7 @@ impl SerialZniffer {
     pub async fn read(&mut self) -> Result<Uint8Array, JsError> {
         // Anything buffered while matching a response is capture data.
         let mut out = std::mem::take(&mut self.pending);
-        if let Some(chunk) = self.read_chunk().await? {
+        if let Some(chunk) = self.read_chunk(CAPTURE_TIMEOUT_MS).await? {
             out.extend_from_slice(&chunk);
         }
         Ok(Uint8Array::from(&out[..]))
@@ -182,13 +228,13 @@ impl SerialZniffer {
         self.sent.push(framed);
 
         for _ in 0..attempts {
-            if let Some(found) = response_payload(&self.pending, cmd) {
-                // Keep the rest: it may be capture data, or a reply still
-                // being matched by a later request.
-                self.pending.clear();
+            if let Some((found, end)) = found_response(&self.pending, cmd) {
+                // Keep whatever followed the reply: on a busy network that
+                // is captured frames, and clearing it would drop them.
+                self.pending.drain(..end);
                 return Ok(Some(found));
             }
-            let Some(chunk) = self.read_chunk().await? else {
+            let Some(chunk) = self.read_chunk(READ_TIMEOUT_MS).await? else {
                 break;
             };
             self.pending.extend_from_slice(&chunk);
@@ -210,13 +256,30 @@ impl SerialZniffer {
         Ok(())
     }
 
-    /// Read one chunk, returning None when the stream ends.
-    async fn read_chunk(&self) -> Result<Option<Vec<u8>>, JsError> {
+    /// Read one chunk, giving up after `timeout_ms`.
+    ///
+    /// A serial read never completes on its own when the device has nothing
+    /// to say, and several commands — `SetFrequency` among them — send no
+    /// reply at all. Without a timeout those calls wait forever.
+    ///
+    /// `Ok(Some(empty))` means the wait expired, which is not an error: a
+    /// quiet radio looks exactly the same as one that has finished talking.
+    async fn read_chunk(&self, timeout_ms: i32) -> Result<Option<Vec<u8>>, JsError> {
         let readable = self.port.readable();
         let reader: ReadableStreamDefaultReader = readable
             .get_reader()
             .unchecked_into();
-        let result = JsFuture::from(reader.read()).await;
+
+        let result = match race(reader.read(), timeout_ms).await {
+            Some(result) => result,
+            None => {
+                // Cancel the pending read, or the next one inherits it and
+                // the stream stays locked.
+                let _ = reader.cancel();
+                reader.release_lock();
+                return Ok(Some(Vec::new()));
+            },
+        };
         reader.release_lock();
 
         let value = result
