@@ -125,6 +125,16 @@ impl<W: Write> ZlfWriter<W> {
     }
 }
 
+impl ZlfWriter<Vec<u8>> {
+    /// The bytes written so far.
+    ///
+    /// Only for an in-memory trace, which is how the browser records: it
+    /// needs to read the trace back while still appending to it.
+    pub fn buffer(&self) -> &[u8] {
+        &self.w
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -187,6 +197,37 @@ mod tests {
             assert_eq!(&record.payload, payload);
         }
         assert!(reader.next_record().unwrap().is_none());
+    }
+
+    /// A trace built the way the browser builds one — appending records to
+    /// an in-memory buffer and reading it back while still writing — must
+    /// parse at every step.
+    #[test]
+    fn an_in_memory_trace_is_readable_while_it_grows() {
+        let mut writer = ZlfWriter::new(Vec::new(), "live").unwrap();
+        assert_eq!(writer.buffer().len(), ZLF_HEADER_SIZE, "header first");
+        ZlfReader::new(Cursor::new(writer.buffer().to_vec())).unwrap();
+
+        for i in 0..5 {
+            writer
+                .write_record(
+                    Timestamp::from_unix_millis(1_700_000_000_000 + i),
+                    false,
+                    0,
+                    ApiType::Zniffer,
+                    &[0x23, 0x04, 0x00],
+                )
+                .unwrap();
+
+            // Read back everything written so far, as the viewer would.
+            let mut reader = ZlfReader::new(Cursor::new(writer.buffer().to_vec())).unwrap();
+            let mut seen = 0;
+            while reader.next_record().unwrap().is_some() {
+                seen += 1;
+            }
+            assert_eq!(seen, i + 1, "every record written is readable");
+            assert_eq!(writer.buffer().len() as u64, writer.bytes_written());
+        }
     }
 
     #[test]
