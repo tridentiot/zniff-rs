@@ -8,3 +8,6 @@ Cargo.lock
 # Legacy Python 2 codegen scripts, superseded by the Rust XML decoders.
 cmdclass_xml2c.py
 xml2c_decoder.py
+
+# Captures written by `zniff-serve` into the working directory.
+/capture-*.zlf

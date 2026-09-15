@@ -52,6 +52,14 @@ impl Timestamp {
     pub fn unix_millis(self) -> i64 {
         (self.ticks() - TICKS_UNIX_EPOCH) / TICKS_PER_MILLISECOND
     }
+
+    /// Build a timestamp from milliseconds since the Unix epoch.
+    ///
+    /// The `DateTimeKind` bits are left at zero (`Unspecified`), matching what
+    /// the C# writer stores for captured records.
+    pub fn from_unix_millis(millis: i64) -> Self {
+        Self { raw: millis * TICKS_PER_MILLISECOND + TICKS_UNIX_EPOCH }
+    }
 }
 
 /// One record as stored in a ZLF file.

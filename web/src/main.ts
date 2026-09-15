@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: Trident IoT, LLC <https://www.tridentiot.com>
 // SPDX-License-Identifier: MIT
 import init, { Trace } from "../pkg/zniff_rs_wasm.js";
+import {
+  type Capture,
+  type Dongle,
+  connect,
+  serialSupported,
+} from "./capture.js";
 
 interface Row {
   record_offset: number;
@@ -36,6 +42,7 @@ interface Field {
 interface Window_ {
   offset: number;
   next_offset: number | null;
+  end_offset: number;
   rows: Row[];
 }
 
@@ -103,6 +110,15 @@ const els = {
   goto: $<HTMLInputElement>("goto"),
   info: $<HTMLDivElement>("info"),
   infoToggle: $<HTMLButtonElement>("info-toggle"),
+  serial: $<HTMLParagraphElement>("serial"),
+  connect: $<HTMLButtonElement>("connect"),
+  captureStop: $<HTMLButtonElement>("capture-stop"),
+  captureSave: $<HTMLButtonElement>("capture-save"),
+  picker: $<HTMLDivElement>("picker"),
+  pickerDevice: $<HTMLParagraphElement>("picker-device"),
+  region: $<HTMLSelectElement>("region"),
+  pickerStart: $<HTMLButtonElement>("picker-start"),
+  pickerCancel: $<HTMLButtonElement>("picker-cancel"),
 };
 
 /**
@@ -112,6 +128,7 @@ const els = {
  * desktop values are too tight for a proportional web font.
  */
 const DEFAULT_WIDTHS: Record<string, number> = {
+  line: 55,
   date: 84,
   time: 100,
   speed: 84,
@@ -219,8 +236,37 @@ let overview: Overview | null = null;
 let rows: Row[] = [];
 /** Record offset of the first window currently in the list. */
 let windowOffset = 0;
+
+/**
+ * Frame number of `rows[0]`, or null when it is not known.
+ *
+ * Numbering a frame means knowing how many came before it, and there is no
+ * index: the only way to know is to have counted them. So the number is
+ * tracked while reading forward from the start of the trace, and is null
+ * after a jump to a time or a record in the middle, where counting the
+ * skipped frames would mean reading the whole file.
+ *
+ * A blank Line cell is therefore honest rather than missing.
+ */
+let firstLine: number | null = null;
 /** Record offset of the window after the last one loaded, or null at EOF. */
 let nextOffset: number | null = null;
+
+/**
+ * Live capture state.
+ *
+ * A trace that is still being captured keeps growing, so reaching its end is
+ * not final: `tailOffset` remembers where reading stopped, and polling resumes
+ * from there once the file grows. Only set for a `?live=1` session, so an
+ * ordinary static trace behaves exactly as before.
+ */
+let live: { timer: number; size: number } | null = null;
+
+/** Where to resume from after the trace grows, set when EOF is reached. */
+let tailOffset: number | null = null;
+
+/** The capture in progress, when one is running. */
+let capture: Capture | null = null;
 /** Set while a window is loading, so scrolling cannot re-enter. */
 let paging = false;
 
@@ -277,7 +323,11 @@ function renderRows(): void {
         r.retransmission > 0
           ? `<span class="tag" title="Retransmission, attempt ${r.retransmission + 1}">RETX</span> `
           : "";
+      // Blank when the count is unknown, which is the case after jumping
+      // into the middle of a trace.
+      const line = firstLine === null ? "" : (firstLine + pos).toLocaleString();
       return `<tr data-pos="${pos}" class="${stripe}${sel}${retx}" style="--frame-fg:${r.fg};--frame-bg:${r.bg}">
+        <td class="num line">${line}</td>
         <td>${formatDate(r.time_ms)}</td>
         <td>${formatTime(r.time_ms)}</td>
         <td>${r.speed}</td>
@@ -304,8 +354,11 @@ function updateStatus(): void {
   // A count is exact only when the whole trace was read; otherwise it is
   // extrapolated, and saying so avoids "181 shown of ~175".
   const count = Math.round(overview.estimated_frames).toLocaleString();
+  // While capturing, the end of the file is only the end *so far*.
+  const capturing = live ? " · capturing" : "";
   if (overview.frames_exact) {
-    els.status.textContent = `${rows.length.toLocaleString()} frames`;
+    els.status.textContent =
+      `${rows.length.toLocaleString()} frames${capturing}`;
     return;
   }
 
@@ -315,9 +368,10 @@ function updateStatus(): void {
   const pct = overview.size
     ? Math.min(100, Math.round((100 * reached) / overview.size))
     : 0;
-  const end = nextOffset === null ? " · end of trace" : "";
+  const end = nextOffset === null && !live ? " · end of trace" : "";
   els.status.textContent =
-    `${rows.length.toLocaleString()} loaded · ~${count} in trace · ${pct}% through${end}`;
+    `${rows.length.toLocaleString()} loaded · ~${count} in trace · ` +
+    `${pct}% through${end}${capturing}`;
 }
 
 /** Load the window starting at a record offset. */
@@ -330,6 +384,10 @@ async function showWindow(offset: number): Promise<void> {
   rows = w.rows;
   windowOffset = w.offset;
   nextOffset = w.next_offset ?? null;
+  if (nextOffset === null) tailOffset = w.end_offset;
+  // Numbering is only known when the window is the start of the trace;
+  // anywhere else, the frames before it have not been counted.
+  firstLine = overview && w.offset === overview.first_offset ? 1 : null;
   selected = -1;
   renderRows();
   clearDetail();
@@ -355,15 +413,21 @@ async function appendNext(): Promise<void> {
 
     rows = rows.concat(w.rows);
     nextOffset = w.next_offset ?? null;
+    // Remember where the trace ran out, so a live capture picks up after the
+    // last record read rather than re-reading the final window.
+    if (nextOffset === null) tailOffset = w.end_offset;
 
     let dropped = 0;
     if (rows.length > MAX_ROWS) {
       dropped = rows.length - MAX_ROWS;
       rows = rows.slice(dropped);
       // The first window in the list has moved on; remember where from, so
-      // scrolling back to the top can still fetch what came before.
+      // `prependPrevious` knows what to read back.
       windowOffset = rows[0]?.record_offset ?? windowOffset;
       if (selected >= 0) selected -= dropped;
+      // rows[0] is now a later frame, so its number moves with it. Without
+      // this the trimmed rows would be renumbered from the start.
+      if (firstLine !== null) firstLine += dropped;
     }
 
     renderRows();
@@ -371,6 +435,98 @@ async function appendNext(): Promise<void> {
       // Keep the rows under the cursor where they were.
       els.list.scrollTop -= dropped * rowHeight;
     }
+  } finally {
+    paging = false;
+  }
+}
+
+/**
+ * Follow a capture that is still running.
+ *
+ * The viewer learns a trace's length once, when it opens, so a growing file
+ * is invisible until the length is re-probed. Polling does that, and only
+ * appends when the trace has actually grown, so a quiet radio costs one small
+ * request per interval and changes nothing on screen.
+ */
+function startLiveTail(): void {
+  if (live) return;
+  const POLL_MS = 1000;
+  const timer = window.setInterval(async () => {
+    if (!trace || !live || paging) return;
+    let size: number;
+    try {
+      size = await trace.poll_growth();
+    } catch {
+      // A capture that has finished stops answering; leave the rows in place.
+      return;
+    }
+    if (size <= live.size) return;
+    live.size = size;
+
+    // Reaching the end of a growing trace is not final: resume from the
+    // record boundary where reading stopped.
+    if (nextOffset === null && tailOffset !== null) {
+      nextOffset = tailOffset;
+      tailOffset = null;
+    }
+    // Only pull new rows in when the view is already at the bottom, so
+    // reading back through the trace is not interrupted.
+    const atBottom =
+      els.list.scrollTop + els.list.clientHeight >= els.list.scrollHeight - rowHeight * 2;
+    if (atBottom) await appendNext();
+    updateStatus();
+  }, POLL_MS);
+  live = { timer, size: 0 };
+}
+
+/** Stop following a capture. */
+function stopLiveTail(): void {
+  if (!live) return;
+  window.clearInterval(live.timer);
+  live = null;
+}
+
+/**
+ * Put back the window before the one at the top of the list.
+ *
+ * Rows trimmed by `appendNext` are gone from the DOM but not from the trace,
+ * so scrolling back re-reads them. The scroll position is moved down by the
+ * height of what was inserted, which keeps the rows under the cursor still.
+ */
+async function prependPrevious(): Promise<void> {
+  if (!trace || paging || windowOffset <= 0) return;
+  // Already at the start; nothing came before.
+  if (overview && windowOffset <= overview.first_offset) return;
+
+  paging = true;
+  try {
+    const w = (await trace.rows_before(windowOffset, WINDOW)) as Window_;
+    if (w.rows.length === 0) return;
+
+    rows = w.rows.concat(rows);
+    windowOffset = w.offset;
+    if (selected >= 0) selected += w.rows.length;
+    // The list now starts earlier, so its first frame number does too.
+    if (firstLine !== null) firstLine -= w.rows.length;
+    // Scrolling back far enough to reach the start makes the count known,
+    // even if the trace was entered somewhere in the middle.
+    if (firstLine === null && overview && w.offset === overview.first_offset) {
+      firstLine = 1;
+    }
+
+    let dropped = 0;
+    if (rows.length > MAX_ROWS) {
+      // Trim from the far end this time, so scrolling back does not grow
+      // the list without bound.
+      dropped = rows.length - MAX_ROWS;
+      rows = rows.slice(0, MAX_ROWS);
+      if (selected >= MAX_ROWS) selected = -1;
+      nextOffset = rows[rows.length - 1]?.record_offset ?? nextOffset;
+    }
+
+    renderRows();
+    // Inserting above would otherwise push the view down by that much.
+    els.list.scrollTop += w.rows.length * rowHeight;
   } finally {
     paging = false;
   }
@@ -490,6 +646,9 @@ async function showTime(timeMs: number): Promise<void> {
   rows = w.rows;
   windowOffset = w.offset;
   nextOffset = w.next_offset ?? null;
+  if (nextOffset === null) tailOffset = w.end_offset;
+  // A jump by time skips an unknown number of frames.
+  firstLine = overview && w.offset === overview.first_offset ? 1 : null;
   ahead = null;
   selected = -1;
   renderRows();
@@ -639,6 +798,9 @@ async function applyFilter(): Promise<void> {
 
   rows = [];
   selected = -1;
+  // Matches are scattered through the trace, so consecutive result rows are
+  // not consecutive frames; numbering them 1, 2, 3 would be a lie.
+  firstLine = null;
   clearDetail();
 
   let offset = overview.first_offset;
@@ -664,6 +826,10 @@ async function applyFilter(): Promise<void> {
 
 async function load(open: () => Promise<Trace> | Trace, label: string): Promise<void> {
   els.status.textContent = `Opening ${label}…`;
+  // Dropping a file while following a capture must not leave the old poll
+  // running against the new trace.
+  stopLiveTail();
+  tailOffset = null;
   try {
     trace = await open();
     overview = (await trace.overview()) as Overview;
@@ -678,6 +844,7 @@ async function load(open: () => Promise<Trace> | Trace, label: string): Promise<
   els.goto.disabled = false;
   els.infoToggle.disabled = false;
   els.info.hidden = true;
+  els.info.dataset.filled = "";
   els.infoToggle.setAttribute("aria-expanded", "false");
 
   measureRowHeight();
@@ -693,8 +860,150 @@ function measureRowHeight(): void {
   }
 }
 
+/** The connected dongle, while the region is being chosen. */
+let dongle: Dongle | null = null;
+
+/** Connect to a dongle and offer its regions. */
+async function connectDongle(): Promise<void> {
+  if (capture || dongle) return;
+  els.status.textContent = "Waiting for a zniffer\u2026";
+  try {
+    dongle = await connect();
+  } catch (e) {
+    // A cancelled picker is a choice, not a failure.
+    const message = String(e);
+    els.status.textContent = /NotFoundError|cancel|No port selected/i.test(message)
+      ? ""
+      : `Could not connect: ${message}`;
+    return;
+  }
+
+  els.pickerDevice.textContent = dongle.version;
+  // The list comes from the device, so it shows what this dongle can do
+  // rather than what the software knows about.
+  els.region.innerHTML = dongle.regions
+    .map(
+      (r) =>
+        `<option value="${r.code}"${r.current ? " selected" : ""}>${escape(r.name)}</option>`,
+    )
+    .join("");
+
+  // A region named in the URL wins, so a CI page can pin one.
+  const wanted = new URLSearchParams(location.search).get("region");
+  if (wanted) {
+    const match = dongle.regions.find(
+      (r) => r.name.toLowerCase() === wanted.toLowerCase() || String(r.code) === wanted,
+    );
+    if (match) els.region.value = String(match.code);
+  }
+
+  els.picker.hidden = false;
+  els.connect.disabled = true;
+  els.status.textContent = "";
+}
+
+/** Tune to the chosen region and start capturing. */
+async function startCapture(): Promise<void> {
+  if (!dongle) return;
+  const code = Number(els.region.value);
+  const name = els.region.selectedOptions[0]?.textContent ?? String(code);
+  els.status.textContent = `Tuning to ${name}\u2026`;
+  els.pickerStart.disabled = true;
+
+  try {
+    capture = await dongle.start(code);
+  } catch (e) {
+    els.status.textContent = `Could not start: ${e}`;
+    els.pickerStart.disabled = false;
+    return;
+  }
+
+  dongle = null;
+  els.picker.hidden = true;
+  els.pickerStart.disabled = false;
+  els.captureStop.hidden = false;
+  els.captureSave.hidden = false;
+  await load(() => capture!.trace, `the zniffer on ${name}`);
+  startLiveTail();
+}
+
+/** Release the port without capturing. */
+async function cancelConnect(): Promise<void> {
+  if (!dongle) return;
+  await dongle.cancel();
+  dongle = null;
+  els.picker.hidden = true;
+  els.connect.disabled = false;
+  els.status.textContent = "";
+}
+
+/** Stop the capture, leaving the frames on screen. */
+async function stopCapture(): Promise<void> {
+  if (!capture) return;
+  await capture.stop();
+  stopLiveTail();
+  els.captureStop.hidden = true;
+  els.connect.disabled = false;
+  updateStatus();
+}
+
+/** Save the capture as a .zlf. */
+function saveCapture(): void {
+  if (!capture) return;
+  // Copy into a plain ArrayBuffer: the WASM view is over memory that may be
+  // shared, which Blob will not take.
+  const bytes = capture.bytes();
+  const buffer = new ArrayBuffer(bytes.length);
+  new Uint8Array(buffer).set(bytes);
+  const blob = new Blob([buffer], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  a.download = `capture-${stamp}.zlf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Show or hide the trace information panel.
+ *
+ * The contents are read from the trace the first time it is opened, since
+ * that samples frames and there is no reason to pay for it unasked.
+ */
+async function toggleInfo(): Promise<void> {
+  if (!trace) return;
+  const showing = els.info.hidden;
+  if (showing && !els.info.dataset.filled) {
+    els.info.innerHTML = "<p>Reading\u2026</p>";
+    els.info.hidden = false;
+    els.infoToggle.setAttribute("aria-expanded", "true");
+    try {
+      await showInfo();
+      els.info.dataset.filled = "1";
+    } catch (e) {
+      els.info.innerHTML = `<p>Could not read the trace information: ${escape(String(e))}</p>`;
+    }
+    return;
+  }
+  els.info.hidden = !showing;
+  els.infoToggle.setAttribute("aria-expanded", String(showing));
+}
+
 function wireUp(): void {
   setUpColumns();
+
+  els.infoToggle.addEventListener("click", () => void toggleInfo());
+
+  // Only offered where the browser can actually talk to a serial port.
+  if (serialSupported()) {
+    els.serial.hidden = false;
+    els.connect.addEventListener("click", () => void connectDongle());
+    els.pickerStart.addEventListener("click", () => void startCapture());
+    els.pickerCancel.addEventListener("click", () => void cancelConnect());
+    els.captureStop.addEventListener("click", () => void stopCapture());
+    els.captureSave.addEventListener("click", saveCapture);
+  }
 
   els.rows.addEventListener("click", (e) => {
     const tr = (e.target as HTMLElement).closest("tr");
@@ -713,6 +1022,10 @@ function wireUp(): void {
       // Load more rather than only moving within what is loaded.
       void appendNext();
       e.preventDefault();
+    } else if (e.key === "Home") {
+      // Likewise backwards, for rows that were trimmed off the front.
+      void prependPrevious();
+      e.preventDefault();
     }
   });
 
@@ -725,6 +1038,8 @@ function wireUp(): void {
     if (f > 0.5) prefetchNext();
     // Near the bottom: add the rows to the list.
     if (f > 0.85) void appendNext();
+    // Near the top: put back the rows that were trimmed off the front.
+    if (f < 0.15) void prependPrevious();
   });
 
   let debounce: number;
@@ -781,6 +1096,8 @@ async function main(): Promise<void> {
   const url = params.get("trace") ?? params.get("url");
   if (url) {
     await load(() => Trace.open_url(url), url);
+    // `?live=1` follows a trace that something else is still appending to.
+    if (params.get("live") === "1" && trace) startLiveTail();
   }
 }
 
