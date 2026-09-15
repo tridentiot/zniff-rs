@@ -117,7 +117,7 @@ jobs:
           path: ./web/dist
           if-no-files-found: error
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'
         with:
           path: ./web/dist
