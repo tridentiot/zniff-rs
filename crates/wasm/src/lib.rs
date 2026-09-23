@@ -192,8 +192,10 @@ struct Window {
     offset: f64,
     /// Record offset of the next window. Always present, null at the end
     /// of the trace, so a caller cannot mistake absent for "not finished".
-    /// Record offset of the next window, or null at end of file.
     next_offset: Option<f64>,
+    /// Offset just past the last record read. Set even at end of file, so a
+    /// growing capture can resume from exactly where it stopped.
+    end_offset: f64,
     rows: Vec<Row>,
 }
 
@@ -249,6 +251,42 @@ impl TraceSource for Backing {
 
 #[wasm_bindgen]
 impl Trace {
+    /// Start an empty trace that grows as bytes are captured.
+    ///
+    /// The viewer's live tail already re-reads the source length on every
+    /// poll, so appending here is enough to make frames appear; nothing
+    /// else has to know the trace came from a serial port.
+    pub fn open_live(header: Vec<u8>) -> Result<Trace, JsError> {
+        let cursor = TraceCursor::new(Backing::Memory(header), Definitions::load())
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Trace { cursor })
+    }
+
+    /// Append captured bytes to a live trace.
+    ///
+    /// Returns the new length, which is what `poll_growth` reports.
+    pub fn append(&mut self, bytes: &[u8]) -> Result<f64, JsError> {
+        match self.cursor.source_mut() {
+            Backing::Memory(buffer) => {
+                buffer.extend_from_slice(bytes);
+                Ok(buffer.len() as f64)
+            },
+            Backing::Http(_) => {
+                Err(JsError::new("only an in-memory trace can be appended to"))
+            },
+        }
+    }
+
+    /// The whole trace, for saving to a file.
+    pub fn bytes(&mut self) -> Result<Vec<u8>, JsError> {
+        match self.cursor.source_mut() {
+            Backing::Memory(buffer) => Ok(buffer.clone()),
+            Backing::Http(_) => {
+                Err(JsError::new("a linked trace is already a file"))
+            },
+        }
+    }
+
     /// Open a trace already in memory.
     pub fn open_bytes(bytes: Vec<u8>) -> Result<Trace, JsError> {
         let cursor = TraceCursor::new(Backing::Memory(bytes), Definitions::load())
@@ -270,6 +308,39 @@ impl Trace {
         let cursor = TraceCursor::new(Backing::Http(source), Definitions::load())
             .map_err(|e| JsError::new(&e.to_string()))?;
         Ok(Trace { cursor })
+    }
+
+    /// Re-probe a trace that is still being captured.
+    ///
+    /// Returns the number of bytes now available, which grows while a capture
+    /// runs. In-memory traces never grow, so this is a no-op for them.
+    pub async fn poll_growth(&mut self) -> Result<f64, JsError> {
+        let len = match self.cursor.source_mut() {
+            Backing::Memory(b) => b.len() as u64,
+            Backing::Http(r) => {
+                r.refresh_len().await.map_err(|e| JsError::new(&format!("{e:?}")))?
+            },
+        };
+        Ok(len as f64)
+    }
+
+    /// Decode up to `count` frames ending just before the record at `offset`.
+    ///
+    /// This is how the viewer scrolls back to frames it trimmed out of the
+    /// list after reading them once.
+    pub async fn rows_before(
+        &mut self,
+        offset: f64,
+        count: usize,
+    ) -> Result<JsValue, JsError> {
+        let at = offset as u64;
+        // Reading backwards resyncs from earlier in the file, so make sure
+        // those bytes are present before the synchronous decode.
+        let back = (count as u64 + 8) * 64;
+        let from = at.saturating_sub(back);
+        self.prefetch(from, at.saturating_sub(from) + PROBE).await?;
+        let window = self.cursor.frames_before(at, count).map_err(io_err)?;
+        self.window_to_js(window)
     }
 
     /// Size, time span and a rough frame count.
@@ -415,6 +486,7 @@ impl Trace {
                 frames: Vec::new(),
                 origins: Vec::new(),
                 next_offset: None,
+                end_offset: 0,
             }),
         }
     }
@@ -516,6 +588,7 @@ impl Trace {
         let result = Window {
             offset: window.offset as f64,
             next_offset: window.next_offset.map(|o| o as f64),
+            end_offset: window.end_offset as f64,
             rows,
         };
         to_js(&result)
@@ -602,6 +675,7 @@ impl Trace {
         let result = Window {
             offset: window.offset as f64,
             next_offset: window.next_offset.map(|o| o as f64),
+            end_offset: window.end_offset as f64,
             rows: rows_of(&window),
         };
         to_js(&result)
@@ -633,3 +707,8 @@ fn app_field(
         children: param.children.iter().map(|p| app_field(p, payload_at)).collect(),
     }
 }
+// Web Serial exists only in a browser, and its bindings are gated behind
+// web-sys's unstable-API flag (set for wasm32 in .cargo/config.toml).
+// Compiling it for the host would fail and gains nothing.
+#[cfg(target_arch = "wasm32")]
+pub mod serial;

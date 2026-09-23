@@ -11,7 +11,8 @@ and the project is still in its early days, but already with some basics working
 - Parsing of Z-Wave frames
 - Run as a PTI server (`zniff-rs-cli server`) with the Z-Wave (PC) Zniffer as a client
 - Terminal User Interface (TUI)
-- Browser-based trace viewer (see [`web/`](web/))
+- Browser-based trace viewer (see [`web/`](web/)), which can also capture
+  from a dongle over Web Serial
 
 [Future functionality](https://github.com/tridentiot/zniff-rs/issues):
 - Decryption of S0 and S2 encrypted frames
