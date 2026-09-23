@@ -57,12 +57,29 @@ impl RangeSource {
             206 => content_range_total(&probe)
                 .ok_or_else(|| JsValue::from_str("no Content-Range on a 206 response"))?,
             200 => {
-                // The server ignored the range; it will always send the whole
-                // file, so a block cache would fetch it repeatedly.
+                // A 200 usually means a dev server answered a missing file
+                // with index.html, not that ranges are unsupported.
+                let kind = probe
+                    .headers()
+                    .get("Content-Type")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                if kind.contains("text/html") {
+                    return Err(JsValue::from_str(
+                        "the server returned a web page instead of a trace; check \
+                         the path is right and the file is where it is being \
+                         served from",
+                    ));
+                }
                 return Err(JsValue::from_str(
-                    "the server does not support range requests for this trace",
+                    "the server sent the whole file instead of the range \
+                     asked for, so a large trace cannot be read from it",
                 ));
-            }
+            },
+            404 => {
+                return Err(JsValue::from_str("no trace at that address (HTTP 404)"));
+            },
             other => {
                 return Err(JsValue::from_str(&format!(
                     "fetching the trace failed with HTTP {other}"
