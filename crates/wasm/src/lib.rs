@@ -707,3 +707,8 @@ fn app_field(
         children: param.children.iter().map(|p| app_field(p, payload_at)).collect(),
     }
 }
+// Web Serial exists only in a browser, and its bindings are gated behind
+// web-sys's unstable-API flag (set for wasm32 in .cargo/config.toml).
+// Compiling it for the host would fail and gains nothing.
+#[cfg(target_arch = "wasm32")]
+pub mod serial;
