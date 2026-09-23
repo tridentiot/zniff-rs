@@ -415,6 +415,7 @@ impl Trace {
                 frames: Vec::new(),
                 origins: Vec::new(),
                 next_offset: None,
+                end_offset: 0,
             }),
         }
     }
