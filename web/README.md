@@ -168,6 +168,17 @@ home id.
 
 ## Develop
 
+Besides Node.js and a Rust toolchain, the build needs
+[wasm-pack](https://rustwasm.github.io/wasm-pack/) and the
+`wasm32-unknown-unknown` target, neither of which `npm install` provides:
+
+```bash
+cargo install wasm-pack
+rustup target add wasm32-unknown-unknown
+```
+
+Then:
+
 ```bash
 npm install
 npm run dev      # builds the wasm bundle, then serves with hot reload
