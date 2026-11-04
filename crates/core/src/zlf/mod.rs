@@ -4,6 +4,8 @@ pub mod types;
 pub use types::ApiType;
 
 mod reader;
+mod writer;
+pub use writer::ZlfWriter;
 pub use reader::{
     Timestamp,
     ZLF_HEADER_SIZE,

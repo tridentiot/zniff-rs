@@ -19,6 +19,31 @@ https://<host>/?trace=https://ci.example/artifacts/run-123/trace.zlf
 A cross-origin artifact host must send permissive CORS headers for `?trace=`
 to work; otherwise serve the trace from the same origin or via a proxy.
 
+## Capturing from a dongle
+
+**Connect a zniffer** talks to a dongle over Web Serial: pick the port, pick
+a region, and frames appear as they are captured. **Save .zlf** writes the
+trace out, and it is the same format the desktop Zniffer writes — the
+writer is verified against a C# capture byte for byte.
+
+The region list comes from the device rather than a built-in table, so it
+shows what that dongle actually supports, including the Long Range variants.
+
+`?region=<name-or-code>` preselects one, for a page a test rig always opens
+the same way.
+
+Two limits worth knowing:
+
+- **Not every browser has Web Serial.** Chrome, Edge and Opera do; Firefox
+  from 151; Safari does not and [opposes the
+  standard](https://webkit.org/standards-positions/). The button is hidden
+  where it is unavailable.
+- **A capture is held in memory**, so it is bounded by the tab rather than
+  by disk. Save long captures as you go.
+
+Capturing also needs a secure context, which `https://` and `localhost`
+both are.
+
 ### Columns
 
 The columns follow the desktop Zniffer: Date, Time, Speed, RSSI, Ch, Delta,

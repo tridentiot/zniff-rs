@@ -23,4 +23,4 @@ zniff-rs-core = { path = "../core", default-features = false }
 
 [dependencies.web-sys]
 version = "0.3"
-features = ["Headers", "Request", "RequestInit", "Response", "Window", "WorkerGlobalScope"]
+features = ["Headers", "Request", "RequestInit", "Response", "Window", "WorkerGlobalScope", "Navigator", "Serial", "SerialPort", "SerialOptions", "SerialPortRequestOptions", "SerialPortInfo", "ReadableStream", "WritableStream", "ReadableStreamDefaultReader", "WritableStreamDefaultWriter", "ReadableStreamReadResult"]

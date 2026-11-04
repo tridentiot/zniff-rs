@@ -11,4 +11,5 @@ pub mod storage;
 pub mod trace;
 pub mod types;
 pub mod zlf;
+pub mod zniffer;
 pub mod zniffer_parser;
